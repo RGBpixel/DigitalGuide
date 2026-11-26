@@ -1,0 +1,19 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createCanvas,loadImage} from '@napi-rs/canvas';
+import {mediaTools,runMediaTool,probeLocalMedia} from '../packages/media/src/media-tools.js';
+import {power} from '../tests/e2e/live-peer-browser-helpers.js';
+
+export const threeProgrammeColours=(pixels:number[][])=>pixels.some(p=>p[1]>p[0]*2&&p[1]>p[2]*1.4)&&pixels.some(p=>p[0]>p[1]*1.8&&p[0]>p[2]*1.8)&&pixels.some(p=>p[0]>p[1]*1.8&&p[2]>p[1]*1.8&&Math.abs(p[0]-p[2])<90);
+export function programmeBlockPower(bytes:Buffer,hz:number){assert.equal(bytes.length,96000);const blocks=[];for(let offset=0;offset<bytes.length;offset+=9600)blocks.push(power(bytes.subarray(offset,offset+9600),hz));return{mean:blocks.reduce((a,b)=>a+b,0)/blocks.length,min:Math.min(...blocks),max:Math.max(...blocks),blocks:blocks.length};}
+/** Read actual captured bytes. A successful window does not claim uninterrupted audio. */
+export async function measureNativeProgrammeRecording(video:string,root:string,directory:string,ranges:{firstMs:number;lastMs:number}[]){
+ const tools=mediaTools(root),file=path.join(directory,'actual-all-programme.pcm');await runMediaTool(tools.ffmpeg,['-v','error','-nostdin','-n','-i',video,'-vn','-ac','1','-ar','48000','-f','s16le',file]);const pcm=fs.readFileSync(file),observations:{startMs:number;powers:Record<string,number>;coherentFullSecondPowers:Record<string,number>;minimumBlockPowers:Record<string,number>;pixels?:number[][];frame?:string}[]=[],durationMs=pcm.length/96;let selected:typeof observations[number]|undefined;
+ for(let startMs=0;startMs+1000<=durationMs&&observations.length<600;startMs+=250){if(!ranges.some(r=>startMs>=r.firstMs&&startMs+1000<=r.lastMs))continue;const sample=pcm.subarray(startMs*96,(startMs+1000)*96),blocks=Object.fromEntries([440,660,880,1100].map(hz=>[String(hz),programmeBlockPower(sample,hz)])),powers=Object.fromEntries(Object.entries(blocks).map(([hz,b])=>[hz,b.mean])),coherentFullSecondPowers=Object.fromEntries([440,660,880,1100].map(hz=>[String(hz),power(sample,hz)])),minimumBlockPowers=Object.fromEntries(Object.entries(blocks).map(([hz,b])=>[hz,b.min])),observation:typeof observations[number]={startMs,powers,coherentFullSecondPowers,minimumBlockPowers};observations.push(observation);if(!Object.values(powers).every(p=>p>1e-6))continue;
+  const frame=path.join(directory,'actual-recording-window-'+startMs+'.png');await runMediaTool(tools.ffmpeg,['-v','error','-nostdin','-n','-i',video,'-ss',String((startMs+500)/1000),'-frames:v','1','-update','1',frame]);const image=await loadImage(frame),canvas=createCanvas(1280,720),context=canvas.getContext('2d');context.drawImage(image,0,0,1280,720);observation.pixels=[184,624,1064].map(x=>[...context.getImageData(x,500,1,1).data]);observation.frame=path.basename(frame);if(threeProgrammeColours(observation.pixels)){selected=observation;break;}
+ }
+ fs.writeFileSync(path.join(directory,'recording-window-observations.json'),JSON.stringify({method:'Mean target-frequency power over ten non-overlapping 100ms blocks; coherent full-second measurements retained to expose phase cancellation.',ranges,durationMs,observations,selected:selected??null,continuousAudioNotAsserted:true},null,2)+'\n',{flag:'wx'});assert.ok(selected,'No actual one-second window with all four tones and three distinct guest camera colours was observed.');return selected;
+}
+
+if(process.argv[1]?.replaceAll('\\','/').endsWith('/native-live-programme-measure.ts')){const video=path.resolve(process.argv[2]),directory=path.resolve(process.argv[3]);fs.mkdirSync(directory,{recursive:false});const probe=await probeLocalMedia(video,process.cwd()),durationMs=Number(probe.format.duration)*1000;console.log(JSON.stringify(await measureNativeProgrammeRecording(video,process.cwd(),directory,[{firstMs:0,lastMs:durationMs}])));}

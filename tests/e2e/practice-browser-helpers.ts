@@ -1,0 +1,17 @@
+import {randomUUID} from 'node:crypto';
+import {expect,type Page} from '@playwright/test';
+import {practicePreset,type PracticeDefinition,type PracticeRelease,type PracticeRun,type PracticeScenario} from '@digitalguide/contracts';
+import {fixtureIds as f} from '../../packages/test-fixtures/src/seed.js';
+export async function practiceBrowser(page:Page,viewer=false){
+ const errors:string[]=[],writes:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.url().includes('/api/v1/')&&!['GET','HEAD','OPTIONS'].includes(r.method()))writes.push(r.method()+' '+new URL(r.url()).pathname);});
+ await page.addInitScript({content:"window.__practiceDevices=0;for(const method of ['getUserMedia','getDisplayMedia'])Object.defineProperty(navigator.mediaDevices,method,{configurable:true,value:function(){window.__practiceDevices++;return Promise.reject(new Error('Practice is typed only'));}});"});await page.goto('/practice');await page.getByRole('button',{name:viewer?/许宁 · 只读/:/林知 · 管理员/}).click();await expect(page.getByRole('heading',{name:'角色练习与访谈',exact:true})).toBeVisible();const me=(await(await page.request.get('/api/v1/me')).json()).data;
+ async function post<T>(url:string,body:object):Promise<T>{const r=await page.request.post('/api/v1'+url,{data:body,headers:{'x-csrf-token':me.csrfToken,'idempotency-key':randomUUID()}});expect(r.status(),await r.text()).toBeGreaterThanOrEqual(200);expect(r.status()).toBeLessThan(300);return(await r.json()).data;}
+ const get=async<T>(url:string):Promise<T>=>{const r=await page.request.get('/api/v1'+url);expect(r.status(),await r.text()).toBe(200);return(await r.json()).data;};
+ return{post,get,errors,writes};
+}
+export async function practiceBrowserScenario(page:Page,preset:PracticeDefinition['preset']='reception'){
+ const p=await practiceBrowser(page),name='原创浏览器'+preset+'-'+randomUUID().slice(0,8),profile=await p.post<{id:string}>('/profiles',{workspaceId:f.workspaceA,name:name+'角色',avatarAssetId:f.avatarA,scenes:['learning','reception']}),definition=practicePreset(preset,profile.id),scenario=await p.post<PracticeScenario>('/practice/scenarios',{workspaceId:f.workspaceA,name,definition}),plan=await p.post<{hash:string}>('/practice/scenarios/'+scenario.id+'/publish-plan',{version:1}),release=await p.post<PracticeRelease>('/practice/scenarios/'+scenario.id+'/publish',{version:1,planHash:plan.hash,confirmed:true});return{...p,name,profile,definition,scenario,release};
+}
+export async function startPracticeInUI(page:Page,name:string){await page.getByRole('button',{name:'开始训练',exact:true}).click();await page.getByRole('button',{name:new RegExp(name)}).click();const region=page.getByRole('region',{name:'开始训练确认',exact:true});await region.getByLabel(/^我了解本次使用文字模拟/).check();await region.getByLabel(/^同意本次回答和反馈保留/).check();await region.getByRole('button',{name:'确认开始这次训练',exact:true}).click();await expect(page).toHaveURL(/run=[a-f0-9-]{36}/);return new URL(page.url()).searchParams.get('run')!;}
+export async function answerPracticeInUI(page:Page,body:string){await page.getByLabel('我的回答',{exact:true}).fill(body);await page.getByLabel(/^已核对当前问题，提交这段文字/).check();await page.getByRole('button',{name:'保存回答并查看反馈',exact:true}).click();await expect(page.getByRole('button',{name:'已核对反馈，继续流程',exact:true})).toBeVisible();}
+export async function practiceRunFromPage(page:Page,id:string){const r=await page.request.get('/api/v1/practice/runs/'+id);expect(r.status(),await r.text()).toBe(200);return(await r.json()).data as PracticeRun;}

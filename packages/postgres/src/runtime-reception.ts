@@ -1,0 +1,79 @@
+import {nativeOrderUiVerified} from './native-order-ui-state.js';
+import {nativeFoodUiVerified} from './native-food-ui-state.js';
+import {nativeVisionUiVerified} from './native-vision-ui-state.js';
+import {nativeDiningUiVerified} from './native-dining-ui-state.js';
+import {nativeSpeakerUiVerified} from './native-speaker-ui-state.js';
+import {NativeGuestMemory,type NativeMemoryContext} from './runtime-guest-memory.js';
+import {createHash,createHmac,timingSafeEqual,randomUUID} from 'node:crypto';
+import type {z} from 'zod';
+import {AppError,canonical,requirePermission,type Principal} from '../../domain/src/index.js';
+import type {Profile,SceneAppSnapshot,ReceptionSession,ReceptionTerminal,PresenceResult,GuestSessionView,ReceptionFeatures,SpeakerFocusView,sessionInput,presenceInput,messageInput,sessionControlInput,sessionEventInput} from '../../contracts/src/index.js';
+import {selectRealtimeProvider} from '../../providers/src/index.js';
+import {NativeScenes} from './runtime-scenes.js';
+import {nativeBusinessInteger,NativeCoreRepository} from './runtime-repository.js';
+import {nativeSceneSnapshot} from './runtime-scenes-state.js';
+
+export const nativeReceptionCookieName=(runtimeId:string)=>'dg_native_guest_'+runtimeId.replaceAll('-','');
+export const receptionHash=(value:string)=>createHash('sha256').update(value).digest('hex');
+export interface NativeReceptionMeta {id:string;tenantId:string;workspaceId:string;terminalId:string;actorId:string;serviceScene?:'reception'|'restaurant';restaurantId?:string|null;status:ReceptionSession['status'];version:number;focusVersion:number;replyEpoch:number;accessVersion:number;expiresAt:string;profile:Profile|null;scene:SceneAppSnapshot|null;assets:{id:string;version:number;sha256:string;size:number;storageKey:string}[]}
+const errors:Record<string,{status:number;message:string}>={AUTH_REQUIRED:{status:401,message:'本次接待访问已失效，请由工作人员重新打开终端。'},FORBIDDEN:{status:403,message:'当前账号或访客凭证没有此项操作权限，请联系工作人员。'},NOT_FOUND:{status:404,message:'终端或会话不存在，或不属于当前工作空间。'},SESSION_ENDED:{status:410,message:'本次接待已结束或超时，请由前台开始新会话。'},VERSION_CONFLICT:{status:409,message:'接待状态或当前服务对象已经变化，请刷新后核对。'},STATE_CONFLICT:{status:409,message:'接待或播放状态已变化，旧操作不能继续，请刷新当前终端。'},SOURCE_UNAVAILABLE:{status:409,message:'当前角色或公开场景已不可用，请联系工作人员重新选择后开始。'},QUEUE_FULL:{status:409,message:'当前等候人数较多，请由工作人员接待。'},QUEUE_EMPTY:{status:409,message:'没有仍在场的等候访客，请刷新终端。'},RATE_LIMITED:{status:429,message:'输入过于频繁，请稍后再试或请求人工接待。'},QUOTA_EXCEEDED:{status:409,message:'本次会话已达到消息上限，请结束后重新开始。'},VALIDATION_FAILED:{status:400,message:'接待输入无效，请核对内容、版本和确认信息。'}};
+export interface NativeReceptionReply {reply:string|null;citations:unknown[];memory:{personId:string;version:number;factIds:string[]}|null}
+export interface NativeReceptionReplySources {visit:()=>Promise<{text:string}|null>;memory:()=>Promise<NativeMemoryContext|null>}
+export class NativeReception {
+ readonly db;readonly scenes;get features():ReceptionFeatures{return{speakerFocus:nativeSpeakerUiVerified||this.core.speakerUiPreview,speakerHandoffIntent:true,speakerFocusPreview:!nativeSpeakerUiVerified&&this.core.speakerUiPreview,visitRegistration:true,personalMemory:true,visionQuestions:nativeVisionUiVerified||this.core.visionUiPreview,dining:false};}
+ constructor(readonly core:NativeCoreRepository){this.db=core.db;this.scenes=new NativeScenes(core);}
+ featuresFor(scene?:'reception'|'restaurant'):ReceptionFeatures{return scene==='restaurant'?{...this.features,visitRegistration:false,personalMemory:nativeFoodUiVerified||this.core.foodUiPreview,dining:nativeDiningUiVerified||this.core.diningUiPreview,proactiveGreetings:true}:this.features;}
+ async call<T>(fn:string,args:unknown[]=[]):Promise<T>{try{return(await this.db.query<{value:T}>('SELECT '+fn+'('+args.map((_,i)=>'$'+(i+1)).join(',')+') AS value',args)).rows[0].value;}catch(e){const message=e instanceof Error?e.message:'',code=message.startsWith('DGRECEPTION:')?message.slice(12):'',known=errors[code];if(known)throw new AppError(code,known.message,known.status);throw e;}}
+ async sweep(){return nativeBusinessInteger(await this.call<unknown>('dg_native_reception_sweep'));}
+ async scope(p:Principal,workspace:string,write=false){requirePermission(p,'session.manage');await this.core.workspaceLock(p,workspace,write);}
+ async terminalScope(p:Principal,id:string,write=false){const workspace=await this.call<string>('dg_native_reception_terminal_scope',[id]);await this.scope(p,workspace,write);return workspace;}
+ async terminal(p:Principal,id:string){await this.terminalScope(p,id);return this.call<ReceptionTerminal>('dg_native_reception_terminal',[id]);}
+ async terminals(p:Principal,workspaces:string[],cursor:string,limit:number){for(const w of workspaces)await this.scope(p,w);return this.call<ReceptionTerminal[]>('dg_native_reception_terminals',[workspaces,cursor,limit]);}
+ async venues(p:Principal,workspaces:string[]){for(const w of workspaces)await this.core.workspaceLock(p,w);return this.call<{id:string;workspaceId:string;name:string;timezone:string}[]>('dg_native_reception_venues',[workspaces]);}
+ async createTerminal(p:Principal,venue:string,name:string){const workspace=await this.call<string>('dg_native_reception_venue_scope',[venue]);await this.scope(p,workspace,true);return this.call<string>('dg_native_reception_create_terminal',[venue,name]);}
+ async sources(p:Principal,workspace:string,input:z.infer<typeof sessionInput>){let profile:Profile|null=null,scene:SceneAppSnapshot|null=null;await this.scope(p,workspace,true);if(input.sceneAppId){scene=this.scenes.snapshot(await this.scenes.app(p,input.sceneAppId));this.scenes.ready(scene);if(scene.audience!=='public'||scene.scene!=='reception'||scene.workspaceId!==workspace||(input.profileId&&input.profileId!==scene.profileId))throw new AppError('SCOPE_CONFLICT','匿名接待仅使用本工作空间的公开接待场景，请重新选择。',409);await this.scenes.active(p,scene);profile=scene.profile;}else if(input.profileId)profile=await this.core.assets.profile(p,input.profileId);
+  if(profile&&(profile.workspaceId!==workspace||!profile.scenes.includes('reception')))throw new AppError('CAPABILITY_UNAVAILABLE','角色未启用本工作空间接待场景，请修改配置或选择其他角色。',409);
+  const assets=[];for(const id of profile?[profile.avatarAssetId,profile.voiceAssetId].filter((s):s is string=>!!s):[]){const v=await this.core.assets.checked(p,id);assets.push({id,version:v.asset.version,sha256:v.object.sha256,size:nativeBusinessInteger(v.object.size),storageKey:v.object.storage_key});}return{profile,scene,assets};
+ }
+ async createSession(p:Principal,input:z.infer<typeof sessionInput>){const workspace=await this.terminalScope(p,input.terminalId,true),sources=await this.sources(p,workspace,input);return this.call<string>('dg_native_reception_create_session',[input.terminalId,sources]);}
+ async validate(meta:NativeReceptionMeta,write=false){const principal=await this.core.principal(meta.actorId);if(!principal.workspaceIds.includes(meta.workspaceId)||(meta.serviceScene==='restaurant'?!await this.call<boolean>('dg_native_reception_source_valid',[meta.id]):principal.role!=='admin'))throw new AppError('SOURCE_UNAVAILABLE',errors.SOURCE_UNAVAILABLE.message,409);await this.core.workspaceLock(principal,meta.workspaceId,write);if(meta.scene){const snapshot=nativeSceneSnapshot.parse(meta.scene);await this.scenes.active(principal,snapshot);}else if(meta.profile){const versions=(await this.db.query<{config:string}>('SELECT snapshot AS config FROM profile_versions WHERE profile_id=$1 AND version=$2',[meta.profile.id,meta.profile.version])).rows[0];if(!versions||canonical(JSON.parse(versions.config))!==canonical(meta.profile))throw new AppError('SOURCE_UNAVAILABLE',errors.SOURCE_UNAVAILABLE.message,409);}
+  for(const fixed of meta.assets){const current=await this.core.assets.checked(principal,fixed.id);if(current.asset.version!==fixed.version||current.object.sha256!==fixed.sha256||nativeBusinessInteger(current.object.size)!==fixed.size||current.object.storage_key!==fixed.storageKey)throw new AppError('SOURCE_UNAVAILABLE',errors.SOURCE_UNAVAILABLE.message,409);}return meta;
+ }
+ async adminMeta(p:Principal,id:string,write=false){const meta=await this.call<NativeReceptionMeta>('dg_native_reception_meta',[id,null]);if(meta.serviceScene==='restaurant')throw new AppError('NOT_FOUND','请从本店的顾客接待终端管理此会话。',404);await this.scope(p,meta.workspaceId,write);if(['active','human'].includes(meta.status))await this.validate(meta);return meta;}
+ async session(p:Principal,id:string){const meta=await this.adminMeta(p,id);return{...await this.call<ReceptionSession>('dg_native_reception_session',[id]),features:this.featuresFor(meta.serviceScene)};}
+ async presence(p:Principal,id:string,input:z.infer<typeof presenceInput>){await this.terminalScope(p,id,true);return this.call<string>('dg_native_reception_presence',[id,{type:input.type,trackHash:receptionHash(id+':'+input.trackId),sessionId:input.sessionId??null}]);}
+ async presenceResult(id:string){return this.call<PresenceResult>('dg_native_reception_presence_result',[id]);}
+ async next(p:Principal,id:string){await this.terminalScope(p,id,true);return this.call<string>('dg_native_reception_next',[id]);}
+ async adminControl(p:Principal,id:string,input:z.infer<typeof sessionControlInput>){await this.adminMeta(p,id,true);return this.call<string>('dg_native_reception_admin_control',[id,input]);}
+ token(secret:string,runtimeId:string,sessionId:string,grantId:string,purpose:'access'|'csrf'){return createHmac('sha256',secret).update(canonical(['native-reception-v1',runtimeId,sessionId,grantId,purpose])).digest('base64url');}
+ credentials(secret:string,runtimeId:string,sessionId:string,cookie:unknown){if(typeof cookie!=='string'||!/^RG1\.[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}$/.test(cookie))throw new AppError('AUTH_REQUIRED',errors.AUTH_REQUIRED.message,401);const[,grantId,supplied]=cookie.split('.'),expected=this.token(secret,runtimeId,sessionId,grantId,'access');if(!timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))throw new AppError('AUTH_REQUIRED',errors.AUTH_REQUIRED.message,401);const csrfToken=this.token(secret,runtimeId,sessionId,grantId,'csrf');return{grantId,tokenHash:receptionHash(cookie),csrfToken,csrfHash:receptionHash(csrfToken)};}
+ async issue(p:Principal,id:string,secret:string,runtimeId:string){await this.adminMeta(p,id,true);const grantId=randomUUID(),cookie='RG1.'+grantId+'.'+this.token(secret,runtimeId,id,grantId,'access'),csrf=this.token(secret,runtimeId,id,grantId,'csrf');return this.call<string>('dg_native_reception_issue',[id,grantId,receptionHash(cookie),receptionHash(csrf)]);}
+ async access(p:Principal,grantId:string,secret:string,runtimeId:string){const value=await this.call<{sessionId:string;expiresAt:string}>('dg_native_reception_access',[grantId]);await this.adminMeta(p,value.sessionId);return{...value,cookie:'RG1.'+grantId+'.'+this.token(secret,runtimeId,value.sessionId,grantId,'access')};}
+ async guest(id:string,tokenHash:string,csrfHash:string|null,write=false){const meta=await this.call<NativeReceptionMeta>('dg_native_reception_meta',[id,tokenHash]);await this.validate(meta,write);await this.call('dg_native_reception_authorize',[id,tokenHash,csrfHash,write]);return this.call<NativeReceptionMeta>('dg_native_reception_meta',[id,tokenHash]);}
+ guestActor(meta:NativeReceptionMeta):Principal{return{userId:'guest:'+meta.id,tenantId:meta.tenantId,role:'viewer',workspaceIds:[meta.workspaceId],environment:'mock',appEnv:this.db.config.appEnv};}
+ async guestView(id:string,tokenHash:string,csrfToken:string):Promise<GuestSessionView>{const session=await this.call<ReceptionSession>('dg_native_reception_guest_view',[id,tokenHash]);return this.viewWithFocus(session,tokenHash,csrfToken);}
+ async viewWithFocus(session:ReceptionSession,tokenHash:string,csrfToken:string){const focus=this.featuresFor(session.scene).speakerFocus&&['active','human'].includes(session.status)?await this.call<SpeakerFocusView>('dg_native_speaker_view',[session.id,tokenHash]):null;return this.view(session,csrfToken,focus);}
+ view(session:ReceptionSession,csrfToken:string,focus:SpeakerFocusView|null=null):GuestSessionView{const features=this.featuresFor(session.scene);return{session:{...session,features},csrfToken,capabilities:['session.read','text.send','manual.stop','human.request','session.end'],audio:{state:focus?.configured?'mock_focus':'not_configured',focus:focus?.configured?focus.state:'unlocked'},environment:'mock',features};}
+ async composeReply(meta:NativeReceptionMeta,text:string,sources:NativeReceptionReplySources):Promise<NativeReceptionReply>{
+  let reply:string|null=null,citations:unknown[]=[],memory:NativeReceptionReply['memory']=null;
+  if(meta.status==='active'){
+   const serviceCopy=meta.serviceScene==='restaurant'?await this.call<string|null>('dg_native_service_copy',[meta.id,text]):null;
+   if(serviceCopy)reply=serviceCopy;
+   else if(meta.serviceScene==='restaurant'&&/预约|排队|落座|点单|下单|结账|买单|偏好|记忆|来访|拜访|受访|我要找|我想找/.test(text))reply=nativeFoodUiVerified||this.core.foodUiPreview?(nativeOrderUiVerified||this.core.orderUiPreview?'【模拟餐厅回复】您可以在下方核对预约、座位、本次口味、点单、模拟结账和店员服务。历史偏好须本人逐项确认；所有业务操作仍需分别核对，本条回复没有代您提交。':'【模拟餐厅回复】您可以在下方核对预约、排队、座位与本次口味；本人授权的历史建议需要逐项选择、保存并再次确认后才能用于菜单推荐。点单和结账尚未启用，请联系店员；本条回复没有代您提交业务操作。'):nativeDiningUiVerified||this.core.diningUiPreview?'【模拟餐厅回复】您可以在下方核对并提交预约、排队或桌位安排。点单、结账和个人偏好服务尚未启用，请联系店员；本条文字回复没有代您提交任何业务操作。':'【模拟餐厅回复】当前终端可进行文字咨询或请求店员接待。预约、排队、落座、点单、结账和个人偏好服务尚未启用，请由店员协助；本条回复没有执行任何业务操作。';
+   else if(meta.serviceScene!=='restaurant'&&/来访|拜访|受访|接待指引|接待状态|接待进度|我要找|我想找/.test(text)){const context=await sources.visit();reply=context?.text??'【模拟来访回复】您可以自愿填写并核对本次来访登记；如暂未匹配到受访人，请请求前台工作人员协助。';}
+   else if(meta.serviceScene!=='restaurant'&&/记忆|偏好|喜好|称呼|喜欢什么/.test(text)){const context=await sources.memory(),facts=context?.facts.slice(0,10)??[];if(context&&facts.length){memory={personId:context.personId,version:context.version,factIds:facts.map(f=>f.id)};reply='【模拟回复】仅依据您已确认且允许接待使用的偏好：'+facts.map(f=>f.value).join('；')+'。如有变化，您可以在本人偏好中更正或撤回。';}else reply='【模拟回复】当前没有可用于接待的已确认偏好。您可自愿建立本人资料，并逐项确认允许使用的内容。';}
+   else if(meta.scene){const answer=await this.scenes.answer({...this.guestActor(meta),userId:meta.actorId},meta.scene,text.slice(0,500));reply=answer.text;citations=answer.citations;}
+   else reply=selectRealtimeProvider('mock').reply(text,{publicFacts:[]});
+  }
+  return{reply,citations,memory};
+ }
+ async message(meta:NativeReceptionMeta,tokenHash:string,csrfHash:string,input:z.infer<typeof messageInput>){
+  if(input.version!==meta.version||input.focusVersion!==meta.focusVersion)throw new AppError('VERSION_CONFLICT',errors.VERSION_CONFLICT.message,409);
+  const answer=await this.composeReply(meta,input.text,{visit:()=>this.call<{text:string}|null>('dg_native_visit_reply_context',[meta.id,tokenHash]),memory:()=>new NativeGuestMemory(this.core).context(meta.id,tokenHash)});
+  const receipt=await this.call<string>('dg_native_reception_guest_apply',[meta.id,tokenHash,csrfHash,'message',{...input,...answer}]);await this.call('dg_native_service_suggest',['typed',receipt]);return receipt;
+ }
+
+ control(id:string,tokenHash:string,csrfHash:string,input:z.infer<typeof sessionControlInput>){return this.call<string>('dg_native_reception_guest_apply',[id,tokenHash,csrfHash,'control',input]);}
+ event(id:string,tokenHash:string,csrfHash:string,input:z.infer<typeof sessionEventInput>){return this.call<string>('dg_native_reception_guest_apply',[id,tokenHash,csrfHash,'event',input.type==='audio.segment'?{type:input.type,segmentId:input.segmentId,attribution:input.attribution,final:input.final,focusVersion:input.focusVersion,source:input.source}:input]);}
+ async guestResult(receiptId:string,tokenHash:string,csrfToken:string){const result=await this.call<{session?:ReceptionSession;accepted?:boolean;reason?:string;message?:string}>('dg_native_reception_guest_result',[receiptId,tokenHash]);return result.session?this.viewWithFocus(result.session,tokenHash,csrfToken):result;}
+}

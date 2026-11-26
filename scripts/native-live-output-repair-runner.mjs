@@ -1,0 +1,9 @@
+import fs from 'node:fs';
+const file='scripts/native-live-output-checks.mjs',lines=fs.readFileSync(file,'utf8').split('\n'),at=lines.findIndex(l=>l.startsWith('let args;'));if(at<0)throw new Error('Missing old dispatch');
+lines.splice(at,1,`const commands={
+ typecheck:['node_modules/typescript/bin/tsc','--noEmit'],lint:['node_modules/eslint/bin/eslint.js','apps','packages','tests','scripts/*.ts'],build:['scripts/build.mjs'],init:['--import','tsx','scripts/native-live-output-init.ts',label],
+ target:['node_modules/vitest/vitest.mjs','run','tests/integration/postgres-live-output.test.ts','tests/unit/postgres-runtime.test.ts','--reporter=default','--reporter=json','--outputFile='+root+'/'+label+'.json',...process.argv.slice(4)],
+ regression:['node_modules/vitest/vitest.mjs','run','tests/integration/postgres-live-control.test.ts','tests/integration/live-output.test.ts','tests/integration/postgres-team-reviews.test.ts','tests/integration/postgres-media.test.ts','tests/unit/live.test.ts','--reporter=default','--reporter=json','--outputFile='+root+'/'+label+'.json',...process.argv.slice(4)],
+ proof:['--import','tsx','scripts/native-live-output-proof.ts',label],resume:['--import','tsx','scripts/native-live-output-resume.ts',label],finish:['--import','tsx','scripts/native-live-output-finish.ts',label],complete:['--import','tsx','scripts/native-live-output-complete.ts',label],archive:['--import','tsx','scripts/native-live-output-archive.ts',label],finalize:['--import','tsx','scripts/native-live-output-finalize.ts',label],
+ 'current-proof':['--import','tsx','scripts/native-live-output-current-proof.ts',label],'docs-check':['scripts/check-docs.mjs'],'docs-build':['scripts/build-docs.mjs'],'api-spec':['--import','tsx','scripts/export-openapi.ts']
+};const args=commands[mode];if(!args)throw new Error('Unknown check mode');`);fs.writeFileSync(file,lines.join('\n'));

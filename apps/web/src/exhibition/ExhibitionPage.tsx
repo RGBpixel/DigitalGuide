@@ -1,0 +1,16 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Landmark, Plus } from 'lucide-react';
+import type { ExhibitionHall } from '@digitalguide/contracts';
+import { api } from '../api.js';
+import { HallForm, CatalogPanel, RoutePanel, FormError } from './ExhibitionContent.js';
+import { BookingPanel, DevicePanel, TourOperations } from './ExhibitionOperations.js';
+import './exhibition.css';
+export function ExhibitionPage({ workspaceId, role }: { workspaceId: string; role: string }) {
+  const [hallId, setHallId] = useState(''), [tab, setTab] = useState('content'), [editingHall, setEditing] = useState(false), [creatingHall, setCreating] = useState(false), writable = ['admin','editor'].includes(role);
+  const query = useQuery({ queryKey: ['exhibitions', workspaceId], queryFn: () => api<ExhibitionHall[]>('/exhibitions?workspaceId=' + workspaceId) }), hall = query.data?.find(h => h.id === hallId) || query.data?.[0];
+  return <><div className="page-heading"><div><span className="eyebrow">EXHIBITION & GROUP TOURS</span><h1>展厅导览</h1><p>把展品、路线、团体答疑和屏幕联动连成一次可接续的参观。</p></div>{writable && <button className="button primary" onClick={() => { setCreating(true); setEditing(false); }}><Plus size={15}/>新增展馆</button>}</div><div className="info-note"><Landmark size={17}/>当前提供真实本地内容、预约与导览状态，讲解、问答和设备使用明确模拟模式。真人驱动、人声播报和现场设备待接入。</div><FormError error={query.error}/>
+    {query.isPending ? <p role="status">正在加载展馆…</p> : <>{(creatingHall || (writable && !query.data?.length)) && <HallForm workspaceId={workspaceId} saved={async id => { await query.refetch(); setHallId(id); setCreating(false); setTab('content'); }}/>} {hall && <><section className="panel exhibition-panel exhibition-toolbar"><label>当前展馆<select value={hall.id} onChange={e => { setHallId(e.target.value); setEditing(false); }}>{query.data?.map(h => <option value={h.id} key={h.id}>{h.name}{!h.enabled && ' · 已停用'}</option>)}</select></label><div><strong>{hall.name}</strong><p className="form-help">{hall.openingHours}</p></div>{writable && <button className="button secondary" onClick={() => setEditing(!editingHall)}>{editingHall ? '收起展馆设置' : '编辑展馆设置'}</button>}<Link className="text-link" to="/knowledge">配置展厅角色与知识</Link></section>{editingHall && writable && <HallForm key={hall.id + ':' + hall.version} current={hall} workspaceId={workspaceId} saved={async () => { await query.refetch(); setEditing(false); }}/>}<div className="tabs exhibition-tabs">{[['content', '展品讲稿'], ['routes', '参观路线'], ...(writable ? [['bookings', '预约与团体'], ['tours', '开启与管理导览']] : []), ['devices', '展屏与终端']].map(([id, name]) => <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>{name}</button>)}</div><div key={hall.id}>{tab === 'content' && <CatalogPanel hall={hall} writable={writable}/>} {tab === 'routes' && <RoutePanel hall={hall} writable={writable}/>} {tab === 'bookings' && writable && <BookingPanel hall={hall}/>} {tab === 'tours' && writable && <TourOperations hall={hall} admin={role === 'admin'}/>} {tab === 'devices' && <DevicePanel hall={hall} admin={role === 'admin'}/>}</div></>}{!hall && !writable && <section className="panel exhibition-panel"><h2>尚无展馆内容</h2><p>请管理员或内容编辑配置展馆与已发布讲稿。</p></section>}</>}
+  </>;
+}

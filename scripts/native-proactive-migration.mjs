@@ -1,0 +1,8 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const read=f=>fs.readFileSync(f,'utf8').replace(/\r\n/g,'\n'),hash=v=>createHash('sha256').update(v).digest('hex'),root='docs/evidence/T20/postgres-proactive',registryFile='migrations/postgres/runtime.json',registry=JSON.parse(read(registryFile)),name='124-native-proactive-purpose.sql',file='migrations/postgres/'+name;
+assert.equal(registry.version,120);assert.equal(fs.existsSync(file),false);for(const m of registry.migrations)assert.equal(hash(fs.readFileSync('migrations/postgres/'+m.name)),m.sha256,m.name);
+const sql=read('scripts/native-proactive.sql');fs.writeFileSync(file,sql,{flag:'wx'});registry.version=121;registry.migrations.push({name,sha256:hash(sql)});
+for(const f of ['packages/postgres/src/runtime-database.ts','tests/unit/postgres-runtime.test.ts']){let s=read(f),tail="'123-native-conversation-service-source-shape.sql']";assert.equal(s.split(tail).length,2);s=s.replace(tail,()=>"'123-native-conversation-service-source-shape.sql','"+name+"']");if(f.includes('runtime-database')){assert.equal(s.split('manifest.version!==120').length,2);s=s.replace('manifest.version!==120','manifest.version!==121');}fs.writeFileSync(f,s);}
+fs.writeFileSync(registryFile,JSON.stringify(registry,null,2)+'\n');fs.writeFileSync(root+'/migration-124-registered.json',JSON.stringify({result:'PASS_UNAPPLIED_NATIVE_PROACTIVE_REGISTERED',migration:name,sha256:hash(sql),runtime:121,parentRuntime:120,earlierMigrationsUnchanged:true,applied:false,rollbackSyntaxDraftFile:root+'/syntax-draft.json',finalDraftIncludesReadProjectionAndLockCorrections:true},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({name,sha256:hash(sql),runtime:121,applied:false}));

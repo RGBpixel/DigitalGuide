@@ -1,0 +1,16 @@
+.studio-team { display: grid; gap: 16px; min-width: 0; }
+.studio-team h1,.studio-team h2,.studio-team p { margin: 0; }
+.studio-team .studio-form { gap: 12px; }
+.studio-batch-data { min-height: 200px; font-family: ui-monospace,monospace; }
+.studio-batch-plan,.workflow-card { display: grid; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
+.workflow-card { padding: 22px; }
+.studio-team progress { width: 100%; }
+.workflow-review,.workflow-comment { border-top: 1px solid #dce3d7; padding: 16px 0; display: grid; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.workflow-review h3,.workflow-review p,.workflow-comment p { margin: 0; }
+.workflow-comment p { white-space: pre-wrap; }
+.workflow-review .studio-form { max-width: 760px; }
+.workflow-review-media video { display: block; max-width: 100%; width: 640px; background: #17201d; border-radius: 8px; }
+.workflow-review-media audio { max-width: 100%; }
+.workflow-comment small { color: #65766d; }
+.studio-form fieldset { border: 0; padding: 0; min-width: 0; display: grid; gap: 12px; }
+@media(max-width: 640px) { .workflow-card { padding: 16px; } .studio-team .studio-inline { display: grid; grid-template-columns: minmax(0,1fr); } .studio-team input[type=file] { max-width: 100%; min-width: 0; } }

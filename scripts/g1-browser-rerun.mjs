@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+const previous=process.argv[2],folder=process.argv[3];assert.ok(previous?.startsWith('docs/evidence/T16/g1/')&&folder?.startsWith('docs/evidence/T16/g1/'));
+const report=JSON.parse(fs.readFileSync(previous,'utf8')),selected=[];fs.mkdirSync(folder,{recursive:true});assert.ok(!fs.existsSync(folder+'/selection.json'));
+function visit(s){for(const x of s.specs||[])if(x.tests.some(t=>t.status==='unexpected'))selected.push({file:'tests/e2e/'+path.basename(x.file||s.file),title:x.title});for(const c of s.suites||[])visit(c);}for(const s of report.suites)visit(s);assert.ok(selected.length>0);assert.equal(selected.length,report.stats.unexpected);
+const hash=f=>createHash('sha256').update(fs.readFileSync(f)).digest('hex'),escape=s=>[...s].map(c=>'\\^$.*+?()[]{}|'.includes(c)?'\\'+c:c).join(''),files=[...new Set(selected.map(t=>t.file))];for(const f of files){assert.match(f,/^tests\/e2e\/[a-z0-9-]+\.spec\.ts$/);assert.ok(fs.existsSync(f));}
+const args=['node_modules/@playwright/test/cli.js','test',...files,'--grep',selected.map(t=>escape(t.title)).join('|')];fs.writeFileSync(folder+'/selection.json',JSON.stringify({result:'SELECTED_PENDING_EXECUTION',createdAt:new Date().toISOString(),previous,previousSHA256:hash(previous),selected,sourceSHA256:Object.fromEntries(files.map(f=>[f,hash(f)])),otherPassingCasesRetained:true,wholeSuiteRerun:false},null,2)+'\n',{flag:'wx'});
+const log=folder+'/command.log',fd=fs.openSync(log,'wx'),startedAt=new Date().toISOString(),child=spawn(process.execPath,args,{env:{...process.env,EVIDENCE_DIR:folder,E2E_AE_CONTRACT:'1',E2E_AE_SOURCE:'1'},windowsHide:true,stdio:['ignore',fd,fd]});fs.closeSync(fd);console.log(JSON.stringify({cases:selected.length,processId:child.pid,log}));const exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});fs.writeFileSync(folder+'/command.json',JSON.stringify({result:exitCode===0?'PASS':'FAIL',startedAt,endedAt:new Date().toISOString(),command:['node',...args],exitCode,log},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:exitCode===0?'PASS':'FAIL',exitCode,cases:selected.length}));process.exitCode=exitCode||0;

@@ -1,0 +1,1 @@
+{ "name": "@digitalguide/media", "private": true, "type": "module", "exports": "./src/index.ts", "dependencies": { "pngjs": "7.0.0" } }

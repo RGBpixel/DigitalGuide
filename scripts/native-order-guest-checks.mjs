@@ -1,0 +1,3 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+let source=fs.readFileSync('docs/evidence/T20/postgres-order-ui/check-runner.mjs','utf8');assert.equal(source.split("const root='docs/evidence/T20/postgres-order-ui'").length,2);source=source.replace("const root='docs/evidence/T20/postgres-order-ui'","const root='docs/evidence/T20/postgres-order-ui/guest'").replace("core:tests(['tests/integration/postgres-order-ui.test.ts'])","core:tests(['tests/integration/postgres-order-guest.test.ts'])");const file='docs/evidence/T20/postgres-order-ui/guest/check-runner.mjs';if(fs.existsSync(file))assert.equal(fs.readFileSync(file,'utf8'),source);else fs.writeFileSync(file,source,{flag:'wx'});await import('../'+file);

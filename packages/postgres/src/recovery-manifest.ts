@@ -1,0 +1,22 @@
+import path from 'node:path';
+import {z} from 'zod';
+import {RecoveryError} from '../../recovery/src/guard.js';
+import {safeRelative,pathKey,type RecoveryLimits} from '../../recovery/src/files.js';
+import {nativeRuntimeMigrations} from './runtime-database.js';
+import {recoveryJournalCheckpointSchema} from './recovery-journal-format.js';
+
+const sha=z.string().regex(/^[a-f0-9]{64}$/),integer=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),name=z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/);
+export const nativeRecoverySnapshotSchema=z.object({schema:name.regex(/^dg_validation_[a-f0-9]{32}$/),runtimeId:z.uuid(),appEnv:z.enum(['development','sandbox']),ownerRole:name,apiRole:name,workerRole:name,sourceConnectionSHA256:sha,catalogSHA256:sha,recoveryCatalogAlgorithm:z.enum(['check-bool-v1','check-bool-function-identity-v2']).optional(),recoveryCatalogSHA256:sha.optional(),recoveryJournal:recoveryJournalCheckpointSchema.optional(),tables:z.array(z.object({name,rows:integer,sha256:sha}).strict()),sequences:z.array(z.object({name,lastValue:z.string().regex(/^-?\d+$/),isCalled:z.boolean()}).strict()),rows:integer,migrations:z.array(z.object({name:z.string().regex(/^\d{3}-[a-z0-9-]+\.sql$/),sha256:sha}).strict())}).strict().refine(v=>Boolean(v.recoveryCatalogAlgorithm)===Boolean(v.recoveryCatalogSHA256),'Recovery catalog algorithm and digest must be supplied together');
+export type NativeRecoverySnapshot=z.infer<typeof nativeRecoverySnapshotSchema>;
+const manifestSchema=z.object({version:z.literal(1),format:z.literal('postgres-native-local-v1'),backupId:z.uuid(),createdAt:z.iso.datetime(),platform:z.literal('win32'),dataRoot:z.string().min(1).max(2048),files:z.array(z.object({path:z.string(),bytes:integer,sha256:sha}).strict()),directories:z.array(z.string()),database:nativeRecoverySnapshotSchema,tools:z.object({major:z.literal(18),pgDumpSHA256:sha,pgRestoreSHA256:sha}).strict(),activation:z.literal('isolated-validation-only')}).strict();
+export type NativeRecoveryManifest=z.infer<typeof manifestSchema>;
+export function validateNativeRecoveryManifest(input:unknown,cap:RecoveryLimits,root=process.cwd()):NativeRecoveryManifest{
+ const parsed=manifestSchema.safeParse(input);if(!parsed.success)throw new RecoveryError('PG_RECOVERY_MANIFEST_INVALID','原生备份清单格式或摘要无效。');const m=parsed.data;
+ if(!path.isAbsolute(m.dataRoot)||m.files.length+m.directories.length>cap.maxFiles||m.files.reduce((n,f)=>n+f.bytes,0)>cap.maxBytes||m.database.rows>cap.maxRows||m.database.tables.length>2048||m.database.sequences.length>1024)throw new RecoveryError('PG_RECOVERY_LIMIT_EXCEEDED','原生备份路径或容量超过限制。');
+ const entries=new Map<string,'file'|'directory'>();for(const[p,type]of [...m.directories.map(p=>[p,'directory'] as const),...m.files.map(f=>[f.path,'file'] as const)]){safeRelative(p);const key=pathKey(p);if(entries.has(key))throw new RecoveryError('PG_RECOVERY_PATH_INVALID','归档含有重复、大小写或规范化冲突路径。');entries.set(key,type);}
+ for(const p of entries.keys()){const parts=p.split('/');for(let i=1;i<parts.length;i++)if(entries.get(parts.slice(0,i).join('/'))!=='directory')throw new RecoveryError('PG_RECOVERY_PATH_INVALID','归档父目录缺失或类型不符。');}
+ if(!m.directories.includes('runtime')||m.directories.some(d=>d!=='runtime'&&!d.startsWith('runtime/'))||m.files.some(f=>f.path!=='database.pgdump'&&!f.path.startsWith('runtime/'))||!m.files.some(f=>f.path==='database.pgdump'&&f.bytes>0)||!['.session-secret','.provenance-secret','.dg-native-postgres.json','api.json','worker.json'].every(n=>m.files.some(f=>f.path==='runtime/'+n))||m.files.some(f=>['runtime/digitalguide.sqlite','runtime/.dg-recovery-policy.json'].includes(f.path)))throw new RecoveryError('PG_RECOVERY_MANIFEST_INVALID','原生归档缺少快照、私有实例文件或包含不允许的运行文件。');
+ const db=m.database;if(new Set([db.ownerRole,db.apiRole,db.workerRole]).size!==3||new Set(db.tables.map(t=>t.name)).size!==db.tables.length||new Set(db.sequences.map(t=>t.name)).size!==db.sequences.length||db.tables.reduce((n,t)=>n+t.rows,0)!==db.rows||!['_dg_postgres_migrations','_dg_native_runtime_control'].every(n=>db.tables.some(t=>t.name===n)))throw new RecoveryError('PG_RECOVERY_MANIFEST_INVALID','原生表、角色或行数清单不一致。');
+ const known=nativeRuntimeMigrations(root).migrations;if(!db.migrations.some(m=>m.name==='125-native-recovery-quarantine.sql')||JSON.stringify(db.migrations)!==JSON.stringify(known.slice(0,db.migrations.length)))throw new RecoveryError('PG_RECOVERY_MIGRATION_MISMATCH','备份迁移与当前受审查代码不兼容，或不支持数据库恢复隔离。');
+ return m;
+}

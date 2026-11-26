@@ -1,0 +1,3 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const file='docs/evidence/T20/postgres-recovery-privacy/check-runner.mjs';let source=fs.readFileSync('docs/evidence/T20/postgres-recovery-journal/check-runner-v2.mjs','utf8');for(const[from,to]of [["const root='docs/evidence/T20/postgres-recovery-journal'","const root='docs/evidence/T20/postgres-recovery-privacy'"],['const commands={',"const commands={privacy:tests(['tests/integration/postgres-recovery-privacy.test.ts']),"]]){assert.equal(source.split(from).length,2,from);source=source.replace(from,()=>to);}if(fs.existsSync(file))assert.equal(fs.readFileSync(file,'utf8'),source);else fs.writeFileSync(file,source,{flag:'wx'});await import('../'+file);

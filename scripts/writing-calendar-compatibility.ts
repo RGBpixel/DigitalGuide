@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {contentWritingNativeResult,type ContentWritingJob} from '@digitalguide/contracts';
+import {canonical} from '@digitalguide/domain';
+import {validateWritingReview} from '../packages/domain/src/writing-review.js';
+import {requireContentWritingModel} from '../packages/providers/src/content-writing-model.js';
+const folder='docs/evidence/T24/writing-calendar',state=JSON.parse(fs.readFileSync('storage/writing-review-preview-state.json','utf8')) as {stable:{job:ContentWritingJob}};
+const job=state.stable.job,native={result:job.result!,evidence:job.evidence!},request=job.request!,sources=request.sources.filter(s=>native.evidence.retrievedSourceIds.includes(s.id));
+assert.equal(native.evidence.engine.policy,'source-script-reviewed-v2');
+assert.deepEqual(contentWritingNativeResult.parse(native),native);
+validateWritingReview(native,request,sources);
+assert.equal(canonical((await requireContentWritingModel(process.cwd(),native.evidence.engine)).writingEngine),canonical(native.evidence.engine));
+const previous=JSON.parse(fs.readFileSync('docs/evidence/T24/writing-review/verification.json','utf8')) as {sourceSHA256:Record<string,string>};
+const unchanged=['packages/providers/src/content-writing-native-v1.ts','packages/domain/src/content-writing-model.ts','packages/providers/src/local-editor-native.ts','packages/providers/src/live-answer-native.ts'].filter(f=>fs.existsSync(f));
+for(const file of unchanged)assert.equal(createHash('sha256').update(fs.readFileSync(file)).digest('hex'),previous.sourceSHA256[file]);
+fs.writeFileSync(folder+'/legacy-compatibility.json',JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),originalV2JobId:job.id,originalV2EngineAndAllGenerationReviewRepairPromptHashesValidated:true,oldResultAndEvidenceSchemaProjectionUnchanged:true,originalV1FunctionAndParserFilesUnchanged:unchanged,mainCheckpointRewritten:false,oldFactualQualityFailureNotRelabeled:true,generalFactualQualityVerified:false},null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({result:'PASS',originalV2JobId:job.id,oldPromptHashesPreserved:true}));

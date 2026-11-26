@@ -1,0 +1,25 @@
+node_modules/
+.pnpm-store/
+dist/
+storage/
+.env
+.env.*.local
+playwright-report/
+test-results/
+*.log
+
+# 本地私有配置、运行数据与生成产物不进入远程仓库。
+.env.*
+!.env.example
+*.private.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+/outputs/
+/.tmp*
+/docs/evidence/

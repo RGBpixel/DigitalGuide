@@ -1,0 +1,67 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {createHash,randomUUID} from 'node:crypto';
+import {it,expect} from 'vitest';
+import type {LiveOutput,LiveSession,StudioProject,StudioExport,StudioReview,DistributionVariant,DistributionReview,GovernancePolicy,GovernancePlan,GovernanceDelivery,GovernanceReview,PublishingPackage} from '@digitalguide/contracts';
+import {fixtureIds as f} from '../../packages/test-fixtures/src/seed.js';
+import {liveDefinitionFixture} from '../../packages/test-fixtures/src/live.js';
+import {archiveEntries} from '../../packages/test-fixtures/src/zip.js';
+import {harness} from './helpers.js';
+import {shareApi,shareSource} from './share-helpers.js';
+import {prepareOutput,startOutput,waitOutput} from './live-output-helpers.js';
+import {extraGovernanceReviewer,governanceDefinition} from './governance-helpers.js';
+import {runLiveOutput} from '../../apps/worker/src/live-output.js';
+import {runStudioExport} from '../../apps/worker/src/studio-exports.js';
+import {runGovernanceDelivery} from '../../apps/worker/src/content-governance.js';
+import {runPublishingPackage} from '../../apps/worker/src/publishing.js';
+import {probeLocalMedia} from '../../packages/media/src/media-tools.js';
+
+it('同一实际连续直播录制拆条经成片/传播/标识独立审核形成真实素材包，撤回原录制后派生包也停止提供',async()=>{
+ const h=await harness(),stop=new AbortController(),faults:string[]=[];let work:Promise<unknown>|undefined;
+ const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
+ try{
+  const api=shareApi(h),source=await shareSource(h),definition=liveDefinitionFixture(),video=source.output.artifacts.find(a=>a.kind==='video')!;
+  definition.loop=true;definition.maxDurationMs=45000;definition.cues=[{id:randomUUID(),title:'原创实际视频',kind:'video',exportId:source.output.id,artifactId:video.id,sourceInMs:0,durationMs:6000}];
+  const prepared=await prepareOutput(h,definition);await startOutput(h,prepared.session);
+  work=runLiveOutput(h.repo,h.config,stop.signal,e=>faults.push(e instanceof Error?e.message:String(e)));
+  await waitOutput(async()=>(await api.get('/live-outputs/'+prepared.output.id)).json().data as LiveOutput,r=>r.publishedFrames>=48,30000);
+  let live=(await api.get('/live-sessions/'+prepared.session.id)).json().data as LiveSession;
+  await api.good('/live-sessions/'+live.id+'/control',{version:live.version,epoch:live.epoch,action:'stop',confirmed:true});await work;
+  expect(faults).toEqual([]);live=(await api.get('/live-sessions/'+live.id)).json().data;
+  const recording=live.recording!;expect(recording.captureKind).toBe('local_continuous_output');expect(recording.status).toBe('ready');expect(recording.durationMs).toBeGreaterThanOrEqual(1000);
+  const raw=await api.get('/live-recordings/'+recording.id+'/file');expect(raw.statusCode).toBe(200);
+  const captureFile=path.join(h.config.dataDir,'same-source-capture.mp4');fs.writeFileSync(captureFile,raw.rawPayload);const captureProbe=await probeLocalMedia(captureFile,h.config.root);expect(captureProbe.streams.some(s=>s.codec_type==='video'&&s.width===1280&&s.height===720)).toBe(true);
+  const clip=await api.good<{projectId:string}>('/live-recordings/'+recording.id+'/create-clips',{version:recording.version,name:'同源一秒传播拆条',startMs:0,durationMs:1000,confirmed:true});
+  const project=(await api.get('/studio/projects/'+clip.projectId)).json().data as StudioProject;expect(project.version).toBe(1);expect(project.document.timeline?.tracks.some(t=>t.clips.some(c=>c.durationMs===1000))).toBe(true);
+  const input={version:project.version,kind:'video',settings:{preset:'hd',fps:24,transparent:false,omitBackground:false,burnSubtitles:true},startMs:0,durationMs:1000};
+  const plan=await api.good<{hash:string}>('/studio/projects/'+project.id+'/export-plan',input),queued=await api.good<StudioExport>('/studio/projects/'+project.id+'/exports',{...input,planHash:plan.hash,confirmed:true,rightsConfirmed:true});await runStudioExport(h.repo,h.config);
+  const output=(await api.get('/studio/exports/'+queued.id)).json().data as StudioExport;expect(output.status,output.errorMessage||'').toBe('succeeded');
+  const clipVideo=output.artifacts.find(a=>a.kind==='video')!,clipBytes=await api.get(clipVideo.url!.slice('/api/v1'.length));expect(clipBytes.statusCode).toBe(200);expect(digest(clipBytes.rawPayload)).toBe(clipVideo.sha256);
+  const clipFile=path.join(h.config.dataDir,'same-source-one-second.mp4');fs.writeFileSync(clipFile,clipBytes.rawPayload);const clipProbe=await probeLocalMedia(clipFile,h.config.root);
+  expect(Math.abs(Number(clipProbe.format.duration)*1000-1000)).toBeLessThan(2);expect(clipProbe.streams.some(s=>s.codec_type==='video'&&s.width===1920&&s.height===1080)).toBe(true);
+  const reviewer=await h.login(f.reviewerA),deliveryReview=await api.good<StudioReview>('/studio/projects/'+project.id+'/reviews',{version:1,stage:'delivery',exportId:output.id,reviewerId:f.reviewerA,confirmed:true});
+  await api.good('/studio/reviews/'+deliveryReview.id+'/decision',{version:deliveryReview.version,decision:'approve',confirmed:true,note:'核对同源一秒真实直播录制拆条'},reviewer);
+  let variant=await api.good<DistributionVariant>('/distribution/variants',{workspaceId:f.workspaceA,exportId:output.id,platform:'custom',title:'同一直播录制的原创拆条',description:'本地真实合成媒体，未连接外部平台。',tags:['原创'],coverAssetId:f.avatarA,aiDisclosure:'AI辅助制作 · 原创合成节目',rightsConfirmed:true});
+  const variantReview=await api.good<DistributionReview>('/distribution/variants/'+variant.id+'/reviews',{version:variant.version,reviewerId:f.reviewerA,confirmed:true});
+  await api.good('/distribution/reviews/'+variantReview.id+'/decision',{version:variantReview.version,decision:'approve',confirmed:true,note:'核对同源拆条的传播内容'},reviewer);
+  variant=(await api.get('/distribution/variants/'+variant.id)).json().data;expect(variant.approved).toBe(true);
+  const finalReviewer=await extraGovernanceReviewer(h),policy=await api.good<GovernancePolicy>('/content-governance/policies',{workspaceId:f.workspaceA,platform:'custom',name:'同源拆条最终审核',definition:governanceDefinition(),confirmed:true});
+  const governanceInput={variantId:variant.id,variantVersion:variant.version,policyId:policy.id,policyVersion:policy.version,generation:'ai_assisted',sourceStatement:'原创合成直播实际连续片段的独立一秒拆条。'};
+  const gp=await api.good<GovernancePlan>('/content-governance/plan',governanceInput);expect(gp.canCreate,gp.problems.join('；')).toBe(true);
+  const pending=await api.good<GovernanceDelivery>('/content-governance/deliveries',{...governanceInput,planHash:gp.hash,confirmed:true,rightsConfirmed:true});await runGovernanceDelivery(h.repo,h.config);
+  let marked=(await api.get('/content-governance/deliveries/'+pending.id)).json().data as GovernanceDelivery;expect(marked.status,marked.errorMessage||'').toBe('ready');
+  expect((await api.post('/distribution/variants/'+variant.id+'/packages',{version:variant.version})).statusCode).toBe(409);
+  const finalReview=await api.good<GovernanceReview>('/content-governance/deliveries/'+marked.id+'/reviews',{version:marked.version,reviewerId:finalReviewer.id,confirmed:true});
+  await api.good('/content-governance/reviews/'+finalReview.id+'/decision',{version:finalReview.version,decision:'approve',note:'核对实际标识和同源继承，不代表外部平台发布。',acknowledgedIssueIds:marked.issues.filter(i=>i.severity==='review').map(i=>i.id),confirmed:true},finalReviewer.headers);
+  marked=(await api.get('/content-governance/deliveries/'+marked.id)).json().data;expect(marked.effectiveStatus).toBe('approved');
+  const packet=await api.good<PublishingPackage>('/distribution/variants/'+variant.id+'/packages',{version:variant.version});await runPublishingPackage(h.repo,h.config);
+  const ready=(await api.get('/distribution/packages/'+packet.id)).json().data as PublishingPackage;expect(ready.status,ready.errorMessage||'').toBe('ready');
+  const downloaded=await api.get(ready.url!.slice('/api/v1'.length));expect(downloaded.statusCode).toBe(200);const entries=await archiveEntries(downloaded.rawPayload),metadata=JSON.parse(entries.get('metadata.json')!.toString()),markedVideo=marked.artifacts.find(a=>a.kind==='video')!;
+  expect(digest(entries.get('video.mp4')!)).toBe(markedVideo.sha256);expect(metadata.governance.signature).toBe(marked.receipt!.signature);expect(metadata.aiDisclosure).toContain('本地示例 · AI辅助制作');
+  const beforeWithdraw={recordingSHA256:digest(raw.rawPayload),exportVideoSHA256:output.artifacts.find(a=>a.kind==='video')!.sha256,markedVideoSHA256:markedVideo.sha256,packageSHA256:digest(downloaded.rawPayload)};
+  await api.good('/live-recordings/'+recording.id+'/control',{version:recording.version,action:'withdraw',confirmed:true});
+  expect((await api.get('/live-recordings/'+recording.id+'/file')).statusCode).toBe(409);expect((await api.get(ready.url!.slice('/api/v1'.length))).statusCode).toBe(409);expect((await api.get(markedVideo.url!.slice('/api/v1'.length))).statusCode).toBe(409);
+  expect((await api.get('/studio/projects/'+project.id)).json().data.version).toBe(1);
+  if(process.env.EVIDENCE_DIR){const folder=path.join(process.env.EVIDENCE_DIR,'same-source');fs.mkdirSync(folder,{recursive:true});for(const[name,bytes]of[['recording.mp4',raw.rawPayload],['publishing-package.zip',downloaded.rawPayload]] as const)fs.writeFileSync(path.join(folder,name),bytes,{flag:'wx'});fs.writeFileSync(path.join(folder,'result.json'),JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),...beforeWithdraw,recordingDurationMs:recording.durationMs,clipDurationMs:1000,projectId:project.id,projectVersionAfterWithdrawal:1,sourceRecordingWithdrawalBlocksHistoricalAndDerivedDownloads:true,unapprovedFinalLabelCouldNotProducePackage:true,threeExplicitReviewStages:true,actualContinuousFragments:true,physicalDevices:false,realExternalPublishing:false},null,2)+'\n',{flag:'wx'});}
+ }finally{stop.abort();if(work)await Promise.allSettled([work]);await h.close();}
+},180000);

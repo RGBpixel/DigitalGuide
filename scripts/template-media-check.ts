@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {PNG} from 'pngjs';
+import {mediaTools,probeLocalMedia,runMediaTool} from '../packages/media/src/media-tools.js';
+export const sha=(v:Buffer|string)=>createHash('sha256').update(v).digest('hex');
+export async function checkTemplateMedia(folder:string,name:string,bytes:{video:Buffer;audio:Buffer;srt:Buffer},expected:{title:string;color:'green'|'red';position:number;silent:boolean}){
+ const video=path.join(folder,name+'.mp4'),audio=path.join(folder,name+'.wav');for(const [file,data]of [[video,bytes.video],[audio,bytes.audio],[path.join(folder,name+'.srt'),bytes.srt]]as const)fs.writeFileSync(file,data,{flag:'wx'});const probe=await probeLocalMedia(video,process.cwd());assert.ok(probe.streams.some(s=>s.codec_type==='video'&&s.width===1920&&s.height===1080));assert.ok(probe.streams.some(s=>s.codec_type==='audio'));const frames=[];
+ for(const time of [.1,.5,.9]){const file=path.join(folder,name+'-'+time+'.png');await runMediaTool(mediaTools(process.cwd()).ffmpeg,['-v','error','-nostdin','-n','-ss',String(time),'-i',video,'-frames:v','1','-update','1',file]);const png=PNG.sync.read(fs.readFileSync(file)),x=Math.round((expected.position+.3*time+.125)*png.width),y=Math.round(.35*png.height),offset=(y*png.width+x)*4,pixel=[...png.data.subarray(offset,offset+4)];assert.equal(pixel.length,4);assert.ok(expected.color==='green'?pixel[1]-pixel[0]>100:pixel[0]-pixel[1]>100,'实际移动色块位置/颜色与参数不符');frames.push({timeMs:time*1000,x,y,pixel,sha256:sha(fs.readFileSync(file))});}
+ const wav=bytes.audio;assert.equal(wav.toString('ascii',0,4),'RIFF');let offset=12,size=0;while(offset+8<wav.length){const n=wav.readUInt32LE(offset+4);if(wav.toString('ascii',offset,offset+4)==='data'){size=n;offset+=8;break;}offset+=8+n+n%2;}assert.ok(size>0&&offset+size<=wav.length);let power=0;for(let i=offset;i+1<offset+size;i+=2)power+=(wav.readInt16LE(i)/32768)**2;const rms=Math.sqrt(power/(size/2));assert.ok(expected.silent?rms<.001:rms>.01);assert.ok(bytes.srt.toString('utf8').includes(expected.title));return{result:'PASS',kind:'native_timeline',notAe:true,width:1920,height:1080,durationMs:1000,frames,audio:{rms,silent:expected.silent,sha256:sha(wav)},video:{sha256:sha(bytes.video),size:bytes.video.length},captions:{title:expected.title,sha256:sha(bytes.srt)}};
+}

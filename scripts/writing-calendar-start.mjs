@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const folder='docs/evidence/T24/writing-calendar',previousFile='docs/evidence/T24/writing-review/verification.json';
+const hash=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+assert.equal(hash(previousFile),'6c2f62211a58a977d14c7e81d5df033928d976ee49860306b65307d5d27f2bb6');
+const previous=JSON.parse(fs.readFileSync(previousFile,'utf8'));
+const changed=Object.entries(previous.sourceSHA256).filter(([file,sha])=>!fs.existsSync(file)||hash(file)!==sha).map(([file])=>file);
+assert.deepEqual(changed,[]);
+const earlier={...previous.earlierFinalManifestSHA256,[previousFile]:hash(previousFile)};
+for(const [file,sha] of Object.entries(earlier))assert.equal(hash(file),sha);
+const backlog=JSON.parse(fs.readFileSync('docs/backlog.json','utf8'));
+assert.equal(backlog.requirements.length,134);assert.equal(backlog.tasks.length,38);assert.equal(backlog.tasks.filter(t=>t.status==='verified').length,22);
+fs.mkdirSync(folder+'/runtime',{recursive:true});
+fs.writeFileSync(folder+'/start-source-audit.json',JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),previousGoalTurn:'progress',previousManifest:previousFile,previousManifestSHA256:hash(previousFile),previousSourceFilesChecked:Object.keys(previous.sourceSHA256).length,changedPreviousSource:changed,earlierFinalManifestSHA256:earlier,scope:backlog.expectedCounts,totalLocallyVerifiedTasks:22,migration:'047-content-writing.sql',migrationSHA256:hash('migrations/sqlite/047-content-writing.sql'),newMigrationRequired:false,nextMigration:'048',goalOrPlatformCompleted:false},null,2)+'\n',{flag:'wx'});
+const backupSource=fs.readFileSync('scripts/writing-review-backup.ts','utf8');
+fs.writeFileSync('scripts/writing-calendar-backup.ts',backupSource.replaceAll('writing-review','writing-calendar'),{flag:'wx'});
+console.log(JSON.stringify({result:'PASS',previousGoalTurn:'progress',previousSourceFiles:Object.keys(previous.sourceSHA256).length,earlierFinalManifests:Object.keys(earlier).length}));

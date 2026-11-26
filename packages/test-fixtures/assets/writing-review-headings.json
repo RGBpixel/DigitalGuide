@@ -1,0 +1,8 @@
+[
+  {"name":"topic-heading-positive","kind":"heading","title":"员工休息区使用说明","angle":"介绍休息区的使用规则","text":"","quote":"内部休息区仅供持工作证的员工使用，访客请前往公共等候区。","supported":true},
+  {"name":"unsupported-heading-permission","kind":"heading","title":"访客可随时使用内部休息区","angle":"来宾使用休息区","text":"","quote":"内部休息区仅供持工作证的员工使用，访客请前往公共等候区。","supported":false},
+  {"name":"repair-topic-positive","kind":"heading","title":"设备报修与领取提醒","angle":"设备报修后的领取条件","text":"","quote":"设备报修完成后，工作人员会确认领取时间；收到领取通知后可取回设备。","supported":true},
+  {"name":"repair-guarantee-negative","kind":"heading","title":"报修后马上修好并取回设备","angle":"即时报修与领取","text":"","quote":"设备报修完成后，工作人员会确认领取时间；收到领取通知后可取回设备。","supported":false},
+  {"name":"hours-topic-positive","kind":"heading","title":"培训开放时间介绍","angle":"参训时段与休息日","text":"","quote":"培训室周一到周五09:00—16:00开放，周末休息。","supported":true},
+  {"name":"hours-claim-negative","kind":"heading","title":"周末全天开放的培训室","angle":"周末培训安排","text":"","quote":"培训室周一到周五09:00—16:00开放，周末休息。","supported":false}
+]

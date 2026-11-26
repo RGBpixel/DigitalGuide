@@ -1,0 +1,10 @@
+import {z} from 'zod';
+const sha=z.string().regex(/^[a-f0-9]{64}$/);
+export const localEditorEngine=z.strictObject({modelId:z.literal('Qwen3-4B-Instruct-2507-Q8_0'),modelSha256:sha,revision:z.literal('a06e946bb6b655725eafa393f4a9745d460374c9'),quantization:z.literal('Q8_0'),runtime:z.literal('llama.cpp-cpu'),runtimeVersion:z.literal('b12359-b1b770d90'),runtimeSha256:sha,policy:z.literal('qwen3-instruct-selected-json-v1'),contextTokens:z.literal(8192),maximumOutputTokens:z.literal(2048),threads:z.literal(8)});
+export type LocalEditorEngine=z.infer<typeof localEditorEngine>;
+export const localEditorEvidence=z.strictObject({engine:localEditorEngine,inputSHA256:sha,promptSHA256:sha,rawOutputSHA256:sha,promptTokens:z.int().nonnegative(),outputCharacters:z.int().nonnegative(),elapsedMs:z.number().nonnegative(),compiledWorkerEntry:z.boolean(),offlineCpu:z.literal(true)});
+export type LocalEditorEvidence=z.infer<typeof localEditorEvidence>;
+export const assistantInterpretationCreate=z.strictObject({version:z.int().positive(),parentTurnId:z.uuid().nullable(),instruction:z.string().trim().min(1).max(4000),confirmed:z.literal(true)});
+export const assistantInterpretationControl=z.strictObject({version:z.int().positive(),action:z.enum(['cancel','retry'])});
+export const assistantInterpretationSchema=z.strictObject({id:z.uuid(),sessionId:z.uuid(),version:z.int().positive(),status:z.enum(['queued','processing','succeeded','failed','cancelled','stale']),attempts:z.int().nonnegative(),progress:z.number().min(0).max(1),parentTurnId:z.uuid().nullable(),sessionVersion:z.int().positive(),instruction:z.string().nullable(),engine:localEditorEngine.nullable(),evidence:localEditorEvidence.nullable(),turnId:z.uuid().nullable(),available:z.boolean(),unavailableReason:z.string().nullable(),errorCode:z.string().nullable(),errorMessage:z.string().nullable(),canCancel:z.boolean(),canRetry:z.boolean(),createdAt:z.iso.datetime(),updatedAt:z.iso.datetime()});
+export type AssistantInterpretation=z.infer<typeof assistantInterpretationSchema>;

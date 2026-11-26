@@ -1,0 +1,13 @@
+import {z} from 'zod';
+import {aeManifest} from './ae-templates.js';
+import {templateParameters} from './template-controls.js';
+const id=z.uuid(),sha=z.string().regex(/^[a-f0-9]{64}$/),version=z.int().positive();
+export const aeMediaInput=z.strictObject({version,name:z.string().trim().min(1).max(80),rightsNote:z.string().trim().min(8).max(500),expiresAt:z.iso.datetime()});
+export const aeMediaCreate=aeMediaInput.extend({planHash:sha,confirmed:z.literal(true),rightsConfirmed:z.literal(true)});
+export const aeMediaConfirm=z.strictObject({version,confirmed:z.literal(true)});
+export const aeMediaOrigin=z.strictObject({schemaVersion:z.literal(1),batchId:id,jobId:id,artifactId:id,jobVersion:version,manifest:aeManifest,manifestSHA256:sha,runtimeId:sha,mode:z.enum(['local_aerender','contract_test']),parameters:templateParameters,sourceHash:sha,references:z.array(z.strictObject({key:z.string(),id,version,sha256:sha,size:z.int().positive(),expiresAt:z.string().nullable()})).max(40),video:z.strictObject({sha256:sha,size:z.int().positive(),mediaType:z.enum(['video/mp4','video/quicktime'])})});
+export type AeMediaOrigin=z.infer<typeof aeMediaOrigin>;
+export const aeMediaPlan=z.strictObject({hash:sha,artifactId:id,workspaceId:id,name:z.string(),templateName:z.string(),mode:z.enum(['local_aerender','contract_test']),simulated:z.boolean(),width:z.int(),height:z.int(),durationMs:z.number(),mediaType:z.enum(['video/mp4','video/quicktime']),sha256:sha,size:z.int(),expiresAt:z.string(),warnings:z.array(z.string())});
+export type AeMediaPlan=z.infer<typeof aeMediaPlan>;
+export const aeMediaJob=z.strictObject({id,artifactId:id,workspaceId:id,name:z.string(),version,status:z.enum(['queued','processing','succeeded','failed','cancelled','withdrawn']),stage:z.enum(['queued','copying','inspecting','committing','finished']),progress:z.int(),attempts:z.int(),mode:z.enum(['local_aerender','contract_test']),simulated:z.boolean(),available:z.boolean(),unavailableReason:z.string().nullable(),assetId:id.nullable(),projectId:id.nullable(),errorCode:z.string().nullable(),errorMessage:z.string().nullable(),expiresAt:z.string(),createdAt:z.string()});
+export type AeMediaJob=z.infer<typeof aeMediaJob>;

@@ -1,0 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {segmentationFixture} from './segmentation.js';
+import {syntheticWav} from './seed.js';
+import {mediaTools,runMediaTool} from '../../media/src/media-tools.js';
+export const trackingOffsets=(frames=6)=>Array.from({length:frames},(_,i)=>Math.round(-55+110*(frames<=6?i/Math.max(1,frames-1):1-Math.abs(2*i/Math.max(1,frames-1)-1))));
+export async function trackingVideoFixture(directory:string,root=process.cwd(),frames=6,disappearAt:number|null=null){fs.mkdirSync(directory,{recursive:true});const offsets=trackingOffsets(frames);for(let i=0;i<frames;i++)fs.writeFileSync(path.join(directory,`frame-${i}.png`),segmentationFixture(disappearAt!==null&&i>=disappearAt?1000:offsets[i]).image);const audio=path.join(directory,'audio.wav'),file=path.join(directory,'original.mp4');fs.writeFileSync(audio,syntheticWav());await runMediaTool(mediaTools(root).ffmpeg,['-v','error','-n','-framerate','6','-i',path.join(directory,'frame-%d.png'),'-i',audio,'-t',String(frames/6),'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-af','aloop=loop=-1:size=8000','-movflags','+faststart',file],undefined,30000);return{file,offsets,fps:6,frames,durationMs:Math.round(frames*1000/6)};}
+export function trackedHeadCenter(rgba:Uint8Array,width:number,height:number){const points:number[]=[];for(let y=Math.round(height*.14);y<Math.round(height*.34);y++)for(let x=0;x<width;x++){const at=(y*width+x)*4,r=rgba[at],g=rgba[at+1],b=rgba[at+2];if(r>160&&r>g+12&&g>b+12&&b<185)points.push(x);}if(points.length<100)throw new Error('Actual output did not contain the expected independently colored fictional face region.');points.sort((a,b)=>a-b);return points[Math.floor(points.length/2)]/width;}

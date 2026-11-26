@@ -1,0 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+const stage=process.argv[2],handle=process.env.PREVIEW_SESSION_HANDLE,folder='docs/evidence/T20/postgres-speech/runtime/main-'+stage;assert.ok(['current'].includes(stage)&&handle);fs.mkdirSync(folder,{recursive:true});assert.ok(!fs.existsSync(folder+'/checks.json'));
+const steps=[['readiness','g1-acceptance-readiness.mjs',[folder+'/readiness.json'],{}],['practice','practice-preview.ts',['--verify-only'],{PRACTICE_EVIDENCE_DIR:folder+'/practice'}]];
+const results=[];for(const[name,script,args,extra]of steps){const target=path.join(folder,name);fs.mkdirSync(target,{recursive:true});const fd=fs.openSync(target+'/command.log','wx'),c=spawn(process.execPath,['--import','tsx','scripts/'+script,...args],{env:{...process.env,PREVIEW_SESSION:handle,PREVIEW_SESSION_HANDLE:handle,PREVIEW_SCHEMA_MIGRATION:'052-practice.sql',...extra},windowsHide:true,stdio:['ignore',fd,fd]});const exitCode=await new Promise((resolve,reject)=>{c.once('error',reject);c.once('close',resolve);});fs.closeSync(fd);results.push({name,script,args,exitCode});console.log(JSON.stringify({name,exitCode}));if(exitCode!==0)break;}
+const result=results.length===steps.length&&results.every(r=>r.exitCode===0)?'PASS':'FAIL';fs.writeFileSync(folder+'/checks.json',JSON.stringify({result,checkedAt:new Date().toISOString(),previewSession:handle,stage,steps:results,readOnlyOriginalDemonstrations:true,realBusinessWritesOrCapture:false},null,2)+'\n',{flag:'wx'});assert.equal(result,'PASS');

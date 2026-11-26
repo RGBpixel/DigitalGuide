@@ -1,0 +1,71 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T16/g1',criteria=JSON.parse(fs.readFileSync(root+'/criteria.json','utf8')),output=root+'/verification-spec.json';assert.ok(!fs.existsSync(output));
+// Each row states the original G1 portion, concrete current assertions to inspect,
+// and the files that must have applicable execution evidence. File presence alone is not a pass.
+const rows=[
+ [1,'独立源目录锁定安装、从零建库和构建；真实退出重启后角色、登录和20项任务保留。',['process-restart','jobs-recovery'],['workspace'],['clean-current/proof.json','clean-current/cleanup-audit.json','recovery-first/proof.json']],
+ [2,'服务器拒绝跨租户/空间的资产、会话、订单及私人消息访问；客户端隐藏按钮不能替代校验。',['access-assets','reception','orders-safety','office','practice'],['workspace','orders-kitchen','office','practice']],
+ [3,'实际媒体字节/规格和上传限额、独立用途授权、生效/撤回及无授权拒绝训练；前端无服务端密钥。',['access-assets','jobs-recovery','characters'],['workspace','characters','asset-expiry']],
+ [4,'持久任务重启、取消、可见失败、引用型幂等、未知结果不盲目重复，副作用和用量各一次。',['jobs-recovery','process-restart','studio-batches'],['workspace','studio-team'],['clean-current/proof.json']],
+ [5,'显式模拟接近事件去重/冷却，摄像头拒绝后仍有文字接待，不声称物理感知。',['reception'],['reception']],
+ [6,'匿名登记确认、指定接待人、模拟通知回执/回复、超时升级及关闭，不授予访客成员身份。',['visits'],['visits']],
+ [7,'低置信候选和未登记者不显示员工私密资料或授予操作权限，非人脸替代可用。',['vision','access-assets'],['vision']],
+ [8,'来源、待确认/确认、修改/撤回/删除及跨会话恢复凭据；旧索引、原文与摘要不能串人。',['people-memory','memory-recovery','knowledge-scenes'],['people','memory-recovery']],
+ [9,'本人私密口信/会议和独立模拟投递；版本更新、送达与确认分别保存，公共提示无私人正文。',['office'],['office']],
+ [10,'创建和保存固定脚本/分镜/模板版本，刷新还原；局部修改/采用保留无关片段与历史。',['studio','studio-assistant','assistant-interpretations'],['studio','studio-assistant']],
+ [11,'六类轨道实际编辑、拆分/移动/缩放/字幕/撤销/关键帧/音量/画中画/变速/调色影响真实输出。',['timeline','video-timeline','studio-exports'],['timeline','studio-exports','video-media']],
+ [12,'合成双人轮流发言、听者、旁白与镜头/字幕和独立音轨；不计真人克隆效果。',['timeline','studio-exports','characters'],['timeline','characters']],
+ [13,'20个实际工程逐项合成、单项失败隔离、重试/恢复不丢失已成功成果。',['studio-batches'],['studio-team']],
+ [14,'实际FHD文件可播放、音视频/字幕、真实ffprobe规格和成果摘要一致。',['studio-exports','video-timeline','live-to-publishing'],['studio-exports','video-media']],
+ [15,'实际4K与Alpha媒体、两种底色及细边缘/半透明像素；合成测试不计真实人像效果。',['template-alpha','alpha-video-transfer','large-png-package','neural-restoration'],['studio-exports','template-controls','project-packages']],
+ [16,'开放工程、源素材和清单在独立空间重新导入；版本、字节/Alpha和不可迁移项保留。',['project-packages','alpha-video-transfer','large-png-package'],['project-packages']],
+ [17,'固定作品版本的审批、评论/帧批注、冲突和审阅范围；更改作品不能复用旧批准。',['studio-reviews','frame-reviews','content-governance'],['studio-team','frame-reviews','content-governance']],
+ [18,'真实变体/封面/字幕及人工ZIP/明确模拟排期；没有真实远端ID不能声称真实发布。',['distribution','content-governance','live-to-publishing'],['distribution','content-governance']],
+ [19,'桌台竞争最多一方成功；预订、清洁、到期释放和空间授权由服务器控制。',['restaurant'],['restaurant']],
+ [20,'菜单价格和库存的当前事实，偏好明确确认；变价/缺货使旧报价失效。',['restaurant','dining-hospitality','orders-safety'],['restaurant','orders-kitchen']],
+ [21,'确认与派单分开、单一订单/库存占用/持久模拟POS请求、后厨状态及未知回执处理。',['orders-kitchen','orders-safety','g1-financial-idempotency'],['orders-kitchen'],['financial-100-first/financial-100/orders.json']],
+ [22,'签名/时窗/金额/商户和请求一致；重复及乱序回调只记一次可信入账，不降级成功。',['billing','billing-safety','g1-financial-idempotency'],['billing'],['financial-100-first/financial-100/payments.json']],
+ [24,'G1仅验证持久控制代次、停止/重锁和旧回复取消及文字回退；真实声学打断仍G2。',['reception','speaker-focus','runtime-tools'],['reception','speaker-focus','runtime-tools']],
+ [25,'G1验证识别默认关闭、独立同意、候选不授予身份、陌生人不自动长期入库。',['vision','people-memory','speaker-focus'],['vision','people','speaker-focus']],
+ [29,'九类总览路由及所有适用模块的端到端界面，中文空态/加载/错误/权限和跨模块衔接。',[],[],['navigation-browser/e2e-results.json','expiry-browser-first/e2e-results.json']],
+ [30,'全部134项需求逐项列明已执行证据、模拟/真实范围和未完成交付/外部条件；不能因G1删去最终要求。',[],[]],
+ [31,'G1保存独立音色/voice_style参考及授权、版本/停顿/词典；系统声音不作为10句真实风格验收。',['voice-authoring','speech-jobs','system-speech'],['voice']],
+ [32,'人工中英关联、术语/字幕与逐词校对可保存；不把系统配音当跨语言音色和口型验收。',['voice-authoring','speech-jobs'],['voice']],
+ [33,'四类来源、实际静态检查/变体/期限和模拟准备；素材期限录入/提醒/停用，不计真实租赁购买。',['characters','profiles-environments','access-assets'],['characters','asset-expiry']],
+ [34,'固定原创二维动作/表情/时间点影响真实合成，静态GLB和不支持引擎明确说明。',['characters','live-puppet','live-puppet-output'],['characters','live-puppet']],
+ [35,'多来源/定位/选题与可编辑草稿/计划、聊天局部修改；模型事实质量与条件失败另外保留。',['content-sources','content-drafts','studio-assistant','assistant-interpretations','content-writing','writing-review','writing-calendar'],['content-sources','content-drafts','studio-assistant','content-writing','writing-review']],
+ [36,'主动录屏/相机和提词，拒绝权限回退，真实文件上传/检查/采用/播放。',['recordings'],['recordings']],
+ [37,'持久加工、原件/结果对照、规格、明确采用与可回退版本/撤回；算法各自有限质量另报。',['media-processing','gaze-processing','neural-segmentation','denoising','foreground-tracking','semantic-clips','neural-restoration'],['media-processing','gaze','neural-segmentation','denoising','foreground-tracking','semantic-clips','neural-restoration']],
+ [38,'类型化模板参数/预览、AE授权目录和明确契约、实际源ZIP与采用；Adobe运行时待真实条件。',['template-controls','ae-templates','ae-source-exports','ae-media'],['template-controls','ae-templates','ae-source-exports','ae-workflow']],
+ [39,'分类/版本/回收、受限分片收集、实际质检/验收、逐帧评论、独立权限/过期/撤回。',['asset-library','file-collections','frame-reviews'],['asset-library','file-collections','frame-reviews']],
+ [40,'固定互动视频/私域会话/嵌入精确来源、自愿断点统计及撤回，不暴露内部素材。',['shares'],['shares']],
+ [41,'固定课程问题/分支/模拟步骤及真实学习进度，实际SCORM1.2/2004包；目标LMS另验。',['courses','course-exports'],['courses','course-player-focus']],
+ [42,'明确文字模拟的问题流程/原话依据/断点，默认私有与共享撤回删除，正式业务表不变。',['practice'],['practice']],
+ [43,'当前知识来源/版本/受众，模拟ASR/模型/TTS与工具白名单、失败/改版和场景隔离。',['knowledge-scenes','runtime-tools','profiles-environments'],['knowledge-scenes','runtime-tools']],
+ [44,'主动授权相机/共享单帧或来宾媒体；无画面不说已看见，不将画面候选当已登录身份。',['vision','live-peers','live-guest-programme'],['vision','live-peers','live-guest-programme']],
+ [45,'持久节目/排期、固定场景来源和启动计划，资源/授权未就绪不能静默开播。',['live-control'],['live']],
+ [46,'实时/预录/混合与独立目标模拟状态、本机连续真实媒体；不把本地传输当远端频道接通。',['live-control','live-output'],['live','live-output']],
+ [47,'评论去重限频、审核与公开知识/商品、主动连麦/节目和录制用途、输入不授予内部工具。',['live-control','live-answers','live-peers','live-guest-programme'],['live','live-answers','live-peers','live-guest-programme']],
+ [48,'接管/静音/切备/停止有代次、编码确认和旧回复取消，恢复原本已发布位置。',['live-control','live-output','live-speech-state','live-speech-output','live-puppet-output'],['live','live-output','live-speech','live-puppet']],
+ [49,'同一实际连续录制→可编辑一秒工程→FHD成片→独立审批/标识→实际ZIP，上游撤回阻止派生读取。',['live-to-publishing','live-output','live-guest-programme'],['live-output','live-guest-programme']],
+ [50,'自然发布和广告权限分开，预算/审批/在途与确认暂停、签名费用回执/修正及对账，仅明确模拟。',['advertising','advertising-guards','advertising-read-snapshot'],['advertising']],
+ [51,'展馆/内容/路线/团体预约和知识来源，问答结束回原断点，场所及匿名观众范围隔离。',['exhibition'],['exhibition']],
+ [52,'屏幕设备/动作白名单和模拟运行状态，失败/撤销后真实显示并允许人工处理。',['exhibition'],['exhibition']],
+ [53,'真实PPT导入和降级清单，逐页讲稿/字幕/角色位置，讲解/问答/人工接管后的同页毫秒恢复。',['presentations','presentation-answers','presentation-composition'],['presentations','presentation-answers','presentation-composition']],
+ [54,'统一角色修订可绑定独立场景/频道，当前身份/知识/记忆/用途与训练隔离；向导必填/分支有效。',['profiles-environments','knowledge-scenes','practice','live-control'],['knowledge-scenes','practice','live']],
+ [57,'固定渠道规则、真实标识、独立审核和来源链/撤回；文档/评论不能获得私人资料或业务工具。',['content-governance','knowledge-scenes','live-control','live-to-publishing'],['content-governance','knowledge-scenes','live']],
+ [59,'供应商模拟失败熔断/冷却恢复、限额/并发/权益和到期、模式切换明确无真实适配器，不静默成功。',['jobs-recovery','profiles-environments','access-assets'],['workspace','asset-expiry']],
+ [60,'临时和登记模式/独立同意、低质量/多人不锁定；显式模拟参考不自动变长期人员档案。',['speaker-focus'],['speaker-focus']],
+ [61,'G1仅验证目标提取适配声明与参考契约/噪声回退，真实WER和声源分离另做现场评测。',['speaker-focus'],['speaker-focus']],
+ [62,'非目标/不确定/partial在最终归属前不进入回复、展示、记忆和工具；目标打断为明确模拟。',['speaker-focus','orders-safety','runtime-tools'],['speaker-focus','runtime-tools']],
+ [63,'旁人更响不换人，重锁/明确交接代次使迟到音频和旧确认无效，多桌/频道会话隔离。',['speaker-focus','orders-safety','reception'],['speaker-focus','reception']],
+ [64,'临时参考结束/超时/撤回清除，登记模板独立授权及删除状态；匹配/重放不授予身份。',['speaker-focus','vision'],['speaker-focus','vision']],
+ [65,'固定噪声/重叠评测契约、样本/基线与配对统计，明确模拟结果及按键/近场/人工回退。',['speaker-focus'],['speaker-focus']]
+];
+const cases=rows.map(([n,inspection,back,browser,extra=[]])=>{const id='AC-'+String(n).padStart(2,'0'),original=criteria.acceptanceCases.find(c=>c.id===id);assert.ok(original?.g1Applicable,id);const backend=back.map(n=>'tests/integration/'+n+'.test.ts'),browsers=browser.map(n=>'tests/e2e/'+n+'.spec.ts');for(const f of[...backend,...browsers])assert.ok(fs.existsSync(f),f);return{...original,inspection,currentBackendFiles:backend,currentBrowserFiles:browsers,extraEvidence:extra.map(f=>root+'/'+f),verdict:'PENDING_EXECUTION_AND_SCOPE_REVIEW',realCapabilityCompleted:false};});
+assert.equal(cases.length,58);assert.equal(new Set(cases.map(c=>c.id)).size,58);assert.deepEqual(cases.map(c=>c.id).sort(),criteria.acceptanceCases.filter(c=>c.g1Applicable).map(c=>c.id).sort());
+const conditions={T17:'需选定产品线/账号和获授权人像、声音、独立语气样本、输出/资产许可及迁移条件；真实接口与质量尚未全部实现/验收。',T18:'需指定摄像头/麦克风/终端、实际数字人实时链路及自愿识别样本；现场识别/打断/替代流程尚未验收。',T19:'需测试通知/日历、正式渠道或测试POS/商户凭据及具体业务授权；真实回执尚未接入验证。',T20:'需生产OIDC/PostgreSQL/对象存储与部署目标、密钥和恢复策略；基础设施和生命周期仍有开发及演练工作。',T21:'需完整功能、现场/渠道条件和原条款逐项验收；本地模块通过不完成G2。',T31:'需授权语气参考、素材与Adobe工程/许可/字体插件、目标LMS和实时引擎；当前有限算法/脚本质量失败继续解决。',T32:'需频道推流/评论/连麦权限、公网媒体与测试广告账户及具体开播/发布/花费授权；当前仅本机媒体和模拟。',T33:'需实际多模态/语音/练习模型服务、终端/展屏协议及现场条件；本轮规则模拟不替代真实智能。',T34:'需指定Web/小程序/大屏/应用设备矩阵、获许可SDK/本地3D运行时及端云/Alpha链路，不能泛称完全离线。',T35:'需继续实现套餐/货架/SSO/开放API与跨场景指标及部署管理；真实订阅扣费仍需独立授权。',T38:'需预定麦克风/阵列、真实临时/登记目标声源服务、自身播报及邻桌等音频矩阵；固定阈值/删除/低延迟尚未通过现场测试。'};
+const requirements=criteria.requirements.map(r=>{const tasks=criteria.tasks.filter(t=>t.requirementIds.includes(r.id)),real=tasks.filter(t=>['M5','M6'].includes(t.milestone)),local=tasks.filter(t=>!['M5','M6'].includes(t.milestone)),evidence=[...new Set([...r.evidence,...local.filter(t=>t.status==='verified').flatMap(t=>t.evidence)])].filter(f=>fs.existsSync(f));return{id:r.id,title:r.title,acceptanceIds:r.acceptanceIds,originalStatus:r.status,originalLocalStatus:r.localStatus,originalLiveStatus:r.liveStatus,localTasks:local.map(t=>t.id),currentLocalImplementationEvidence:evidence,remainingTasks:tasks.filter(t=>t.status!=='verified').map(t=>({id:t.id,deliverable:t.deliverable,conditions:conditions[t.id]||'本轮完整G1的当前执行和跨模块证据待审核；不能仅凭历史任务状态完成该要求。'})),realTaskConditions:real.map(t=>({id:t.id,condition:conditions[t.id]})),verdict:'PENDING_REQUIREMENT_BY_REQUIREMENT_REVIEW',finalScopePreserved:true};});assert.equal(requirements.length,134);assert.ok(requirements.every(r=>r.localTasks.length||r.realTaskConditions.length));
+fs.writeFileSync(output,JSON.stringify({result:'SPECIFICATION_FROZEN_NOT_A_PASS',createdAt:new Date().toISOString(),criteriaSHA256:createHash('sha256').update(fs.readFileSync(root+'/criteria.json')).digest('hex'),acceptanceCases:cases,g2OnlyCases:criteria.acceptanceCases.filter(c=>!c.g1Applicable),requirements,all58G1CasesAnd134RequirementsAccountedFor:true,verificationBasedOnExecutedAssertionsRequired:true,wholeG1Completed:false,wholeG2Completed:false},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:'SPECIFICATION_FROZEN_NOT_A_PASS',g1Acceptance:58,g2Only:7,requirements:134}));

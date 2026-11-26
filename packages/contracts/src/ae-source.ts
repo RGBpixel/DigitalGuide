@@ -1,0 +1,16 @@
+import {z} from 'zod';
+import {aeManifest,aeRelativePath} from './ae-templates.js';
+const id=z.uuid(),version=z.int().positive(),sha=z.string().regex(/^[a-f0-9]{64}$/),mode=z.enum(['local_aerender','contract_test']);
+export const aeSourceInput=z.strictObject({workspaceId:id,templateId:id,templateVersion:version,name:z.string().trim().min(1).max(80)});
+export const aeSourceCreate=aeSourceInput.extend({planHash:sha,expectedMode:mode,confirmed:z.literal(true),rightsConfirmed:z.literal(true)});
+export const aeSourceControl=z.strictObject({controlVersion:version,confirmed:z.literal(true)});
+export const aeSourceRetry=aeSourceControl.extend({rightsConfirmed:z.literal(true)});
+export const aeSourcePermission=z.strictObject({allowed:z.boolean(),reason:z.string().nullable()});
+export const aeSourceCapability=z.strictObject({templateId:id,templateVersion:version,catalogRevision:version,name:z.string(),sourceExportAllowed:z.boolean(),licenseNote:z.string(),licenseExpiresAt:z.string().nullable(),available:z.boolean(),reason:z.string().nullable(),mode:mode.nullable(),simulated:z.boolean()});
+export const aeSourcePlan=z.strictObject({hash:sha,templateId:id,templateVersion:version,catalogRevision:version,templateName:z.string(),manifestSHA256:sha,mode,simulated:z.boolean(),realAeVerified:z.literal(false),fileCount:z.int(),sourceBytes:z.int(),licenseNote:z.string(),licenseExpiresAt:z.string().nullable(),files:aeManifest.shape.files,warnings:z.array(z.string())});
+export const aeSourceBundle=z.strictObject({format:z.literal('digitalguide-ae-source'),version:z.literal(1),templateName:z.string().min(1).max(80),registrationVersion:version,catalogId:aeManifest.shape.catalogId,catalogRevision:version,mode,simulated:z.boolean(),realAeVerified:z.literal(false),sourceRoot:z.literal('source'),manifestFile:aeRelativePath,manifestSHA256:sha,manifestSize:z.int().min(1).max(1048576),files:aeManifest.shape.files,createdAt:z.iso.datetime(),accessGranted:z.literal(false),requirements:z.array(z.string().max(500)).max(10)});
+export type AeSourceBundle=z.infer<typeof aeSourceBundle>;
+export const aeSourceJob=z.strictObject({id,workspaceId:id,name:z.string(),templateId:id,templateVersion:version,catalogRevision:version,templateName:z.string(),manifestSHA256:sha,planHash:sha,mode,simulated:z.boolean(),realAeVerified:z.literal(false),version,controlVersion:version,status:z.enum(['queued','processing','succeeded','failed','cancelled','withdrawn']),stage:z.enum(['queued','preparing','packing','verifying','finished']),progress:z.int().min(0).max(100),attempts:z.int().min(0).max(3),sourceBytes:z.int(),fileCount:z.int(),sourceReason:z.string().nullable(),errorCode:z.string().nullable(),errorMessage:z.string().nullable(),canRetry:z.boolean(),artifact:z.strictObject({name:z.string(),mediaType:z.literal('application/zip'),size:z.int(),sha256:sha,url:z.string().nullable()}).nullable(),attemptHistory:z.array(z.strictObject({attempt:version,status:z.string(),errorCode:z.string().nullable(),errorMessage:z.string().nullable(),createdAt:z.string(),finishedAt:z.string().nullable()})),createdAt:z.string(),updatedAt:z.string()});
+export type AeSourceInput=z.infer<typeof aeSourceInput>;
+export type AeSourcePlan=z.infer<typeof aeSourcePlan>;
+export type AeSourceJob=z.infer<typeof aeSourceJob>;

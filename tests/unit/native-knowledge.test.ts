@@ -1,0 +1,4 @@
+import {it,expect} from 'vitest';
+import {nativeKnowledgeParts,nativeKnowledgeTokens,nativeKnowledgeTextHash} from '../../packages/postgres/src/runtime-knowledge.js';
+it('原生知识分块按Unicode标量保留重叠原文，不拆开表情代理对',()=>{const text='甲'.repeat(449)+'😀乙'.repeat(300),parts=nativeKnowledgeParts(text);expect([...parts[0]]).toHaveLength(500);expect(parts[0].endsWith('\ud83d')).toBe(false);const rebuilt=parts.map((p,i)=>i?Array.from(p).slice(50).join(''):p).join('');expect(rebuilt).toBe(text);});
+it('规范化关键词去重并同时保留中文双字与英文数字',()=>{const tokens=nativeKnowledgeTokens('ＡＢＣ９９ 原创展册 原创展册');expect(tokens).toContain('abc99');expect(tokens).toContain('原创');expect(tokens).toContain('创展');expect(tokens).toContain('展册');expect(new Set(tokens).size).toBe(tokens.length);expect(nativeKnowledgeTextHash('原创')).toMatch(/^[a-f0-9]{64}$/);});

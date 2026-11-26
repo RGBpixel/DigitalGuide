@@ -1,0 +1,11 @@
+import type { Repository } from '@digitalguide/database';
+import { diningPreferenceFields,type DiningPreference } from '@digitalguide/contracts';
+export interface PreferenceRow {id:string;party_id:string;revision:number;payload:string;status:DiningPreference['status'];source:DiningPreference['source'];source_fact_ids:string;source_import_id:string|null;session_id:string|null;focus_version:number|null;actor_id:string;confirmed_at:string|null;expires_at:string}
+export interface ImportFact {id:string;key:'nickname'|'like'|'avoid';value:string;version:number}
+export interface ImportRow {id:string;party_id:string;session_id:string;focus_version:number;person_id:string;facts:string;expires_at:string}
+const now=()=>new Date().toISOString();
+export function diningPreference(repo:Repository,p:{id:string;current_preference_id:string|null}):DiningPreference|null {
+ if(!p.current_preference_id)return null;const f=repo.get<PreferenceRow>('SELECT * FROM dining_preferences WHERE id=? AND party_id=?',p.current_preference_id,p.id);if(!f)return null;const sourceFactIds=JSON.parse(f.source_fact_ids) as string[];let reason=f.status!=='confirmed'?'本次偏好尚未确认。':f.expires_at<=now()?'本次确认已到期，请重新确认。':null;
+ if(!reason&&f.source_import_id&&sourceFactIds.length){const source=repo.get<ImportRow>('SELECT * FROM dining_memory_imports WHERE id=? AND party_id=?',f.source_import_id,p.id),snapshots=source?JSON.parse(source.facts) as ImportFact[]:[];if(!source||source.expires_at<=now()||sourceFactIds.some(id=>{const old=snapshots.find(x=>x.id===id),current=repo.get<{version:number;value:string}>('SELECT f.version,f.value FROM memory_facts f JOIN people p ON p.id=f.person_id WHERE f.id=? AND f.person_id=? AND f.status=\'confirmed\' AND f.visibility=\'reception\' AND f.expires_at>? AND p.status=\'active\' AND p.personalization=1 AND p.expires_at>?',id,source.person_id,now(),now());return !old||!current||old.version!==current.version||old.value!==current.value;}))reason='来源记忆已修改、到期或撤回，请重新核对本次偏好。';}
+ return {id:f.id,revision:f.revision,preferences:diningPreferenceFields.parse(JSON.parse(f.payload)),status:f.expires_at<=now()?'expired':f.status,source:f.source,confirmedAt:f.confirmed_at,expiresAt:f.expires_at,sourceFactIds,usable:!reason,reason};
+}

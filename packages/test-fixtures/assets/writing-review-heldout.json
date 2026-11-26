@@ -1,0 +1,22 @@
+[
+  {"name":"refund-approval-kept","text":"退款申请通过审核后，款项才会原路退回。","quote":"退款申请须审核通过，款项才会退回原支付账户。","supported":true},
+  {"name":"refund-submission-not-approval","text":"提交退款申请后，款项就会原路退回。","quote":"退款申请须审核通过，款项才会退回原支付账户。","supported":false},
+  {"name":"meeting-topic-subset","text":"会议讨论设备维护。","quote":"会议讨论设备维护与培训安排，参加者可提交书面建议。","supported":true},
+  {"name":"meeting-adds-fee","text":"会议讨论设备维护，参会需要支付报名费。","quote":"会议讨论设备维护与培训安排，参加者可提交书面建议。","supported":false},
+  {"name":"stock-requires-two-confirmations","text":"库存充足且款项到账后，订单才能确认。","quote":"订单确认须同时满足库存充足与款项到账两项条件。","supported":true},
+  {"name":"stock-missing-payment","text":"只要库存充足，订单就能确认。","quote":"订单确认须同时满足库存充足与款项到账两项条件。","supported":false},
+  {"name":"limited-services-kept","text":"这台终端暂不办理退卡或充值。","quote":"该终端暂不办理退卡、充值，仍可查询余额。","supported":true},
+  {"name":"limited-services-expanded","text":"这台终端不提供任何业务服务。","quote":"该终端暂不办理退卡、充值，仍可查询余额。","supported":false},
+  {"name":"temporary-hours-kept","text":"本周五营业时间为10:00至16:00。","quote":"仅本周五营业时间调整为10:00—16:00，其余日期以通知为准。","supported":true},
+  {"name":"temporary-to-permanent","text":"以后每周五营业时间都是10:00至16:00。","quote":"仅本周五营业时间调整为10:00—16:00，其余日期以通知为准。","supported":false},
+  {"name":"english-condition-kept","text":"The room may be used after the host confirms the booking.","quote":"Host confirmation of a booking is required before the room can be used.","supported":true},
+  {"name":"english-condition-removed","text":"The room is available as soon as a booking request is sent.","quote":"Host confirmation of a booking is required before the room can be used.","supported":false},
+  {"name":"recommendation-not-purchase","text":"推荐菜品后，仍由顾客确认是否下单。","quote":"系统可推荐菜品，是否下单须由顾客另行确认。","supported":true},
+  {"name":"recommendation-invents-order","text":"系统推荐菜品时，也会自动完成下单。","quote":"系统可推荐菜品，是否下单须由顾客另行确认。","supported":false},
+  {"name":"question-no-premise","text":"需要了解会议安排吗？","quote":"会议讨论设备维护与培训安排。","supported":true},
+  {"name":"question-false-premise","text":"想参加这场免费提供住宿的会议吗？","quote":"会议讨论设备维护与培训安排。","supported":false},
+  {"name":"exception-kept","text":"员工持工作证可使用内部休息区。","quote":"内部休息区仅供持工作证的员工使用，访客需前往公共等候区。","supported":true},
+  {"name":"exception-expanded","text":"访客和员工都能使用内部休息区。","quote":"内部休息区仅供持工作证的员工使用，访客需前往公共等候区。","supported":false},
+  {"name":"uncertainty-kept","text":"这份安排只是暂定，最后以工作人员确认为准。","quote":"当前安排暂定，最终须由工作人员确认。","supported":true},
+  {"name":"uncertainty-made-certain","text":"这份安排已经最终确定，不会再有变化。","quote":"当前安排暂定，最终须由工作人员确认。","supported":false}
+]

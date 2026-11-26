@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T20/postgres-dining',file=root+'/backend-progress-status.json';
+const sha=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const digest='e9fb9d2467c3023056f42cb2bb168fb7b499d988efbf7b2bf5ccdfb1f2efb445';assert.equal(sha(file),digest);
+const previous=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(previous.result,'PASS_LOCAL_BACKEND_PROGRESS_WITH_RETAINED_FAILURES');
+for(const[file,digest]of Object.entries(previous.sourceSHA256))assert.equal(sha(file),digest,file);
+for(const[file,digest]of Object.entries(previous.documentSHA256))assert.equal(sha(file),digest,file);
+for(const frozen of previous.frozenMigrations)assert.equal(sha('migrations/postgres/'+frozen.migration),frozen.migrationSHA256);
+for(const file of ['PLAN.md','docs/backlog.json'])fs.copyFileSync(file,root+'/ui-'+file.split('/').at(-1)+'.before',fs.constants.COPYFILE_EXCL);
+const result={result:'PASS_UI_START_REVALIDATED',checkedAt:new Date().toISOString(),previousGoalTurnClassification:'progress',previousManifest:file,previousManifestSHA256:digest,currentSourcesVerified:Object.keys(previous.sourceSHA256).length,previousPassingAssertions:66,currentRuntime:90,lastFrozenMigration:'093-native-dining-operation-variable.sql',nextMigration:'094',mainWorkbenchRestarted:false,oldSuccessfulFaultProducersRepeated:false,oldPrivateRootsReactivated:false,goalStatus:'active',fullPlatformScopePreserved:true,nextWork:['current selection and focus bound guest/staff UI','explicit capability gating','original hold worker deadline','post-lock authority expiry','same compiled instance HTTP and restart']};
+fs.writeFileSync(root+'/ui-phase-start.json',JSON.stringify(result,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify(result));

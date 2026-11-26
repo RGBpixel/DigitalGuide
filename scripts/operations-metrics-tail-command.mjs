@@ -1,0 +1,4 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+for(const file of ['scripts/operations-metrics-proof.ts','scripts/operations-metrics-proof-continue.ts']){let s=fs.readFileSync(file,'utf8');const a="if(await buttons.count())await expect(buttons).toBeDisabled();",b="await expect.poll(async()=>await buttons.count()===0||await buttons.isDisabled()).toBe(true);";assert.ok(s.includes(a));s=s.replace(a,()=>b);fs.writeFileSync(file,s);}
+const file='docs/evidence/T35/operations-metrics/check-runner.mjs';let s=fs.readFileSync(file,'utf8');s=s.replace('const commands={',()=>"const commands={'operations-tail':['--import','tsx','scripts/operations-metrics-proof-tail.ts'],");fs.writeFileSync(file,s);console.log('PASS remaining revocation/visual/restart proof registered; historical drivers accept removed controls');

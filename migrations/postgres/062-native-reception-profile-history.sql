@@ -1,0 +1,22 @@
+-- Keep061 frozen; bind fixed profiles to the actual immutable snapshot history column.
+CREATE OR REPLACE FUNCTION dg_native_reception_source_valid(target text) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $dg$
+DECLARE v_session reception_sessions%ROWTYPE;v_origin _dg_native_reception_origins%ROWTYPE;v_terminal _dg_native_reception_terminals%ROWTYPE;v_profile jsonb;v_scene jsonb;v_asset jsonb;v_app scene_apps%ROWTYPE;
+BEGIN
+ SELECT * INTO v_session FROM reception_sessions WHERE id=target;SELECT * INTO v_origin FROM _dg_native_reception_origins WHERE session_id=target;SELECT * INTO v_terminal FROM _dg_native_reception_terminals WHERE terminal_id=v_origin.terminal_id;
+ IF v_session.id IS NULL OR v_origin.session_id IS NULL OR v_terminal.terminal_id IS NULL OR v_origin.invalidated_at IS NOT NULL OR v_terminal.invalidated_at IS NOT NULL OR v_session.environment<>'mock' OR v_session.app_env IS DISTINCT FROM(SELECT app_env FROM _dg_native_runtime_control WHERE id=1) OR v_origin.inputs_hash<>dg_native_office_hash(jsonb_build_object('profile',v_origin.profile::jsonb,'scene',v_origin.scene::jsonb,'assets',v_origin.assets::jsonb)) THEN RETURN false;END IF;
+ IF NOT EXISTS(SELECT 1 FROM memberships m WHERE m.user_id=v_origin.actor_id AND m.tenant_id=v_origin.tenant_id AND m.role='admin' AND m.workspace_ids::jsonb ? v_origin.workspace_id) OR NOT EXISTS(SELECT 1 FROM memberships m WHERE m.user_id=v_terminal.actor_id AND m.tenant_id=v_terminal.tenant_id AND m.role='admin' AND m.workspace_ids::jsonb ? v_terminal.workspace_id) THEN RETURN false;END IF;
+ v_profile:=v_origin.profile::jsonb;v_scene:=v_origin.scene::jsonb;
+ IF v_profile IS NOT NULL AND v_profile<>'null'::jsonb THEN
+  IF NOT EXISTS(SELECT 1 FROM profiles p JOIN profile_versions h ON h.profile_id=p.id WHERE p.id=v_profile->>'id' AND p.tenant_id=v_origin.tenant_id AND p.workspace_id=v_origin.workspace_id AND h.version=(v_profile->>'version')::bigint AND h.snapshot::jsonb=v_profile AND v_profile->'scenes' ? 'reception') THEN RETURN false;END IF;
+  IF jsonb_array_length(v_origin.assets::jsonb)<>(CASE WHEN v_profile->>'voiceAssetId' IS NULL THEN 1 ELSE 2 END) OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(v_origin.assets::jsonb) x WHERE x->>'id'=v_profile->>'avatarAssetId') OR v_profile->>'voiceAssetId' IS NOT NULL AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(v_origin.assets::jsonb) x WHERE x->>'id'=v_profile->>'voiceAssetId') THEN RETURN false;END IF;
+ ELSE IF jsonb_array_length(v_origin.assets::jsonb)<>0 OR v_scene IS NOT NULL AND v_scene<>'null'::jsonb THEN RETURN false;END IF;END IF;
+ FOR v_asset IN SELECT value FROM jsonb_array_elements(v_origin.assets::jsonb) LOOP
+  IF NOT EXISTS(SELECT 1 FROM assets a JOIN uploads u ON u.id=a.upload_id AND u.tenant_id=a.tenant_id AND u.workspace_id=a.workspace_id JOIN _dg_native_asset_origins o ON o.asset_id=a.id AND o.upload_id=u.id AND o.sha256=u.sha256 AND o.size=u.size WHERE a.id=v_asset->>'id' AND a.tenant_id=v_origin.tenant_id AND a.workspace_id=v_origin.workspace_id AND o.tenant_id=a.tenant_id AND o.workspace_id=a.workspace_id AND o.environment='mock' AND o.app_env=v_session.app_env AND a.version=(v_asset->>'version')::bigint AND a.archived=0 AND(a.expires_at IS NULL OR a.expires_at>dg_utc_now()) AND u.sha256=v_asset->>'sha256' AND u.size=(v_asset->>'size')::bigint AND u.storage_key=v_asset->>'storageKey') THEN RETURN false;END IF;
+ END LOOP;
+ IF v_scene IS NOT NULL AND v_scene<>'null'::jsonb THEN
+  SELECT * INTO v_app FROM scene_apps WHERE id=v_scene->>'id' AND tenant_id=v_origin.tenant_id AND workspace_id=v_origin.workspace_id AND environment='mock' AND app_env=v_session.app_env;
+  IF v_app.id IS NULL OR v_app.enabled<>1 OR v_app.scene<>'reception' OR v_app.config::jsonb->>'audience'<>'public' OR(v_app.config::jsonb||jsonb_build_object('id',v_app.id,'workspaceId',v_app.workspace_id,'version',v_app.version,'enabled',v_app.enabled=1,'createdAt',v_app.created_at)) IS DISTINCT FROM v_scene OR v_scene->'profile' IS DISTINCT FROM v_profile THEN RETURN false;END IF;
+  IF EXISTS(SELECT 1 FROM jsonb_array_elements_text(v_scene->'collectionIds') selected(id) LEFT JOIN knowledge_collections c ON c.id=selected.id WHERE c.id IS NULL OR c.tenant_id<>v_origin.tenant_id OR c.workspace_id<>v_origin.workspace_id OR c.audience<>'public' OR NOT(c.scenes::jsonb ? 'reception') OR c.environment<>'mock' OR c.app_env<>v_session.app_env) THEN RETURN false;END IF;
+ END IF;RETURN true;
+EXCEPTION WHEN data_exception THEN RETURN false;
+END;$dg$;

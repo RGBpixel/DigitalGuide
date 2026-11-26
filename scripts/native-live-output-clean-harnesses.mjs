@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+let a=fs.readFileSync('scripts/native-live-output-archive.ts','utf8');a=a.replace("import {nativeLiveOutputBrowser} from './native-live-output-browser.js';\n",'').split('\n').map(l=>l.startsWith('const getSession=')?l.slice(0,l.indexOf(',control=async'))+';':l).join('\n');fs.writeFileSync('scripts/native-live-output-archive.ts',a);
+const file='scripts/native-live-output-finalize.ts',source=fs.readFileSync(file,'utf8'),body=source.slice(source.indexOf('try{\n await c.prepareResume();')),header=`import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import type {LiveSession,LiveOutput,StudioExport} from '../packages/contracts/src/index.js';
+import {NativeContentProofRuntime,proofHash,proofUntil,proofPause,type NativeProofProcess} from './postgres-content-proof-runtime.js';
+import {nativeLiveOutputBrowser} from './native-live-output-browser.js';
+const base='docs/evidence/T20/postgres-live-output',c=await NativeContentProofRuntime.resume(base+'/'+(process.argv[2]??'compiled-finalize'),base+'/compiled-archive/proof.json');let error:unknown,api:NativeProofProcess|undefined,worker:NativeProofProcess|undefined;
+const post=<T>(url:string,body:unknown,key=randomUUID())=>c.http<T>('/api/v1'+url,body,c.apiA,{...c.headers,'idempotency-key':key}).then(r=>{assert.equal(r.status,200,JSON.stringify(r.body));return r.body.data;}),count=(sql:string,params:unknown[]=[])=>c.owner(async q=>Number((await q.query(sql,params)).rows[0].n)),getSession=(id:string)=>c.get<LiveSession>('/live-sessions/'+id),getOutput=(id:string)=>c.get<LiveOutput>('/live-outputs/'+id);
+`;
+const first=body.indexOf(",fixed=await c.owner("),last=body.indexOf(",rawProject=await c.owner(");if(first<0||last<0)throw new Error('Missing old fixed snapshot region');fs.writeFileSync(file,header+body.slice(0,first)+body.slice(last));

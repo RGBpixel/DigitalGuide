@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const file='docs/backlog.json',b=JSON.parse(fs.readFileSync(file,'utf8')),before=JSON.parse(fs.readFileSync('docs/evidence/T20/postgres-restaurant-session/backlog.json.before','utf8'));
+const statuses=v=>['tasks','requirements'].map(k=>v[k].map(r=>[r.id,r.status,r.localStatus,r.liveStatus]));assert.deepEqual(statuses(b),statuses(before));
+const evidence=['docs/104-postgres-restaurant-sessions.md','docs/evidence/T20/postgres-restaurant-session'];
+const note='2026-11-25 增量104：原生餐厅独立终端、当前门店职责、RG1/CSRF匿名咨询、下一位/旧凭证撤回、开启人代次及固定来源、明确合成的专注参考/目标字幕/两步交接完成本地依赖验证。原生签发必须提交刚开启的sessionId，创建终端的经理离职不报废门店终端，开启人失权则永久结束访次。087冻结，记忆限制误挡专注由088追加修正；原初始化、共用守卫、重叠后未重锁和源快照竞争失败均保留。26个不同断言/5文件分阶段有通过记录，6种GUI与390px、433表/两密钥重启一致，类型/lint/构建/OpenAPI通过，不是单轮全仓验收。terminals=true，seating/ordering/payments/hospitality及guest.dining仍false；预约排队、原子预留/落座、本人就餐凭证和偏好推荐、订单后厨、账单支付与餐中餐后服务继续，不把终端依赖当作完整餐厅或T20/G2完成。PG001—088/runtime85/下一089冻结，SQLite052/下一053；主33223四原进程、301表3318原行/3310业务行及原两密钥/AE保持，无重启切库、真实业务或设备采集。134/38/65/26与27本地verified保持，完整批量团队、发布投放、生产治理及真实形象/声音/语气、声纹/抗噪、视觉、渠道/业务系统和G2继续。';
+const task=b.tasks.find(t=>t.id==='T20');task.progressNote=note;task.evidence=[...new Set([...task.evidence,...evidence])];
+for(const id of ['R-046','R-047','R-056','R-129','R-134']){const r=b.requirements.find(r=>r.id===id);r.evidence=[...new Set([...(r.evidence??[]),...evidence])];r.progressNote=(r.progressNote?r.progressNote+'\n':'')+note;}
+b.updatedAt='2026-11-25';assert.deepEqual(statuses(b),statuses(before));fs.writeFileSync(file,JSON.stringify(b,null,2)+'\n');
+const buildFile='scripts/build-docs.mjs',text=fs.readFileSync(buildFile,'utf8'),old="'docs/103-postgres-restaurant.md', 'docs/04-roadmap-acceptance.md'";assert.equal(text.split(old).length,2);fs.writeFileSync(buildFile,text.replace(old,"'docs/103-postgres-restaurant.md', 'docs/104-postgres-restaurant-sessions.md', 'docs/04-roadmap-acceptance.md'"));console.log(JSON.stringify({task:'T20',status:task.status,verified:b.tasks.filter(t=>t.status==='verified').length,scope:b.expectedCounts,goalStatus:'active'}));

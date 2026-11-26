@@ -1,0 +1,3 @@
+import {renderGovernance,type GovernanceRenderInput} from './governance-render.js';
+const abort=new AbortController();process.once('disconnect',()=>abort.abort());process.once('SIGTERM',()=>abort.abort());let started=false;
+process.on('message',async(message:GovernanceRenderInput|{cancel:true})=>{if('cancel'in message){abort.abort();return;}if(started)return;started=true;try{const result=await renderGovernance(message,abort.signal);if(process.connected&&!abort.signal.aborted)process.send?.({result});}catch(e){if(process.connected)process.send?.({error:e instanceof Error?e.message:'标识制作失败。'});}finally{if(process.connected)process.disconnect();}});

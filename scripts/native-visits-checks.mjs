@@ -1,0 +1,28 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+const root='docs/evidence/T20/postgres-visits',label=process.argv[2],mode=process.argv[3];assert.match(label,/^[a-z][a-z0-9-]+$/);
+const walk=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>['node_modules','.git'].includes(e.name)?[]:e.isDirectory()?walk(d+'/'+e.name):[d+'/'+e.name]),files=[...['apps','packages','tests'].flatMap(walk).filter(f=>/\.tsx?$/.test(f)),...walk('migrations').filter(f=>/\.(sql|json)$/.test(f)),...fs.readdirSync('scripts').filter(f=>f.endsWith('.ts')||/^native-visits-.*\.mjs$/.test(f)||f==='postgres-visits-start.mjs').map(f=>'scripts/'+f),'scripts/build.mjs','scripts/build-docs.mjs','scripts/check-docs.mjs'],bindings=[];
+for(const file of new Set(files)){const bytes=fs.readFileSync(file),sha256=createHash('sha256').update(bytes).digest('hex'),bound=root+'/sources/'+sha256+'/'+path.basename(file);fs.mkdirSync(path.dirname(bound),{recursive:true});if(!fs.existsSync(bound))try{fs.writeFileSync(bound,bytes,{flag:'wx'});}catch(e){if(e.code!=='EEXIST')throw e;}let verified=false;for(let i=0;i<40;i++){try{verified=createHash('sha256').update(fs.readFileSync(bound)).digest('hex')===sha256;if(verified)break;}catch(e){if(!['EBUSY','EPERM','ENOENT'].includes(e.code))throw e;}await new Promise(r=>setTimeout(r,25));}assert.equal(verified,true,bound);bindings.push({file,sha256,bound});}
+const tests=names=>['node_modules/vitest/vitest.mjs','run',...names,'--reporter=default','--reporter=json','--outputFile='+root+'/'+label+'.json',...process.argv.slice(4)];
+const commands={typecheck:['node_modules/typescript/bin/tsc','--noEmit'],lint:['node_modules/eslint/bin/eslint.js','apps','packages','tests','scripts/*.ts'],build:['scripts/build.mjs'],target:tests(['tests/integration/postgres-reception-hosts.test.ts']),related:tests(['tests/integration/reception.test.ts','tests/unit/postgres-runtime.test.ts']),cross:tests(['tests/integration/postgres-runtime.test.ts','tests/integration/postgres-runtime-locks.test.ts']),proof:['--import','tsx','scripts/native-visits-proof.ts',label,...process.argv.slice(4)],'docs-build':['scripts/build-docs.mjs'],'docs-check':['scripts/check-docs.mjs'],'api-spec':['--import','tsx','scripts/export-openapi.ts']};
+commands.office=tests(['tests/integration/postgres-office.test.ts','tests/integration/postgres-office-deliveries.test.ts']);
+commands.people=tests(['tests/integration/postgres-people.test.ts']);
+commands.reception=tests(['tests/integration/postgres-reception.test.ts','tests/integration/postgres-reception-lifecycle.test.ts']);
+commands.legacy=tests(['tests/integration/people-memory.test.ts','tests/integration/memory-recovery.test.ts']);
+commands.memory=tests(['tests/integration/postgres-guest-memory.test.ts','tests/integration/postgres-guest-memory-lifecycle.test.ts','tests/integration/postgres-people.test.ts']);
+commands.visits=tests(['tests/integration/visits.test.ts']);
+commands['visit-core']=tests(['tests/integration/postgres-visits.test.ts']);
+commands['visit-delivery']=tests(['tests/integration/postgres-visit-deliveries.test.ts']);
+commands['visit-diagnostic']=tests(['tests/integration/postgres-visit-worker-diagnostic.test.ts']);
+commands['visit-privacy']=tests(['tests/integration/postgres-visit-privacy.test.ts']);
+commands['visit-timing']=tests(['tests/integration/postgres-visit-lifecycle.test.ts']);
+commands['visit-access']=tests(['tests/integration/postgres-visit-access.test.ts']);
+commands['flow-proof']=['--import','tsx','scripts/native-visits-flow-proof.ts',label,...process.argv.slice(4)];
+commands['tail-proof']=['--import','tsx','scripts/native-visits-tail-proof.ts',label,...process.argv.slice(4)];
+commands['runtime-unit']=tests(['tests/unit/postgres-runtime.test.ts']);
+commands['ui-proof']=['--import','tsx','scripts/native-visits-ui-proof.ts',label,...process.argv.slice(4)];
+commands['error-ui-proof']=['--import','tsx','scripts/native-visits-error-ui-proof.ts',label,...process.argv.slice(4)];
+const args=commands[mode];assert.ok(args,'Unknown check mode');const startedAt=new Date().toISOString(),fd=fs.openSync(root+'/'+label+'.log','wx'),child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore',fd,fd]}),exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});fs.closeSync(fd);fs.writeFileSync(root+'/'+label+'-command.json',JSON.stringify({result:exitCode===0?'PASS':'FAIL',command:[process.execPath,...args],startedAt,finishedAt:new Date().toISOString(),exitCode,bindings,sourceSHA256:Object.fromEntries(bindings.map(b=>[b.file,b.sha256]))},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({label,mode,exitCode}));process.exitCode=exitCode;

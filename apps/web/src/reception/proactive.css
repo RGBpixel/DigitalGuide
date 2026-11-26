@@ -1,0 +1,17 @@
+.proactive-panel { margin-top: 20px; }
+.proactive-panel > p { line-height: 1.7; }
+.proactive-status { background: var(--surface-soft, #f4f7f5); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+.proactive-status p { margin: 7px 0 0; overflow-wrap: anywhere; }
+.proactive-form fieldset { border: 0; padding: 0; margin: 0 0 14px; min-width: 0; display: grid; gap: 14px; }
+.proactive-form .checkbox-line { align-items: flex-start; line-height: 1.6; }
+.proactive-form .checkbox-line input { margin-top: 5px; flex: 0 0 auto; }
+.proactive-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.proactive-fields label { display: grid; gap: 7px; min-width: 0; }
+.proactive-fields input { width: 100%; min-width: 0; box-sizing: border-box; }
+.proactive-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.proactive-warning { color: #795617; background: #fff8e8; border-radius: 8px; padding: 10px; }
+@media (max-width: 640px) {
+ .proactive-fields { grid-template-columns: 1fr; }
+ .proactive-actions { display: grid; }
+ .proactive-actions button { width: 100%; }
+}

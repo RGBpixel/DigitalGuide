@@ -1,0 +1,8 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T20/postgres-live-answers',read=f=>JSON.parse(fs.readFileSync(f,'utf8')),summary=read(root+'/compiled-summary.json'),folder=root+'/'+summary.completedProofDirectory,hash=f=>createHash('sha256').update(fs.readFileSync(f)).digest('hex'),browser=read(folder+'/browser/browser.json');
+assert.equal(browser.result,'PASS');assert.equal(browser.devices,0);
+const files=['browser/model-ready-desktop.png','browser/model-recorded-mobile.png','browser/model-readonly-mobile.png','actual-model-frame.png'].map(f=>({file:folder+'/'+f,sha256:hash(folder+'/'+f)}));
+fs.writeFileSync(root+'/visual-review.json',JSON.stringify({result:'PASS',reviewedAt:new Date().toISOString(),manuallyInspectedWithViewImage:true,files,explicitModelOptinVisible:true,twoActualReviewedCandidatesFixedSourcesAndReceiptsVisible:true,twoSystemWavControlsVisible:true,mobile390Fits:true,readonlyWriteControlsAbsent:true,actual720pFrameDecoded:true,unexpectedPageErrors:browser.errors,unexpectedApiErrors:browser.apiErrors,devices:0,limitations:['Finite desktop and 390px verification, without throughput or long-duration acceptance.','Actual picture is a text card; installed system voice is not cloned voice or a rendered person.','The existing live text-card renderer can split English words across lines.','WAV audio was downloaded and decoded offline; physical audio-device playback was not verified.','Unmigrated character and guest panels explicitly report PG_MODULE_NOT_MIGRATED.']},null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({result:'PASS',images:files.length,gui:browser.checks.length,devices:0}));

@@ -1,0 +1,6 @@
+.studio-export-options { display:flex;flex-wrap:wrap;gap:10px 24px;margin:14px 0 }
+.studio-export-plan { border:1px solid #dce2d7;border-radius:10px;padding:16px;margin-top:16px }
+.studio-export-job { border-top:1px solid #dce2d7;padding:16px 0;margin-top:16px }
+.studio-export-job progress { width:min(100%,480px);accent-color:#245649 }
+.studio-export-files { display:flex;flex-wrap:wrap;gap:12px 24px;margin:12px 0;overflow-wrap:anywhere }
+@media(max-width:760px) { .studio-export-options,.studio-export-files { flex-direction:column;align-items:flex-start }.studio-export-plan { padding:12px } }

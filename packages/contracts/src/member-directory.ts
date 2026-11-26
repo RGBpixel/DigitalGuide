@@ -1,0 +1,12 @@
+import {z} from 'zod';
+const id=z.uuid(),version=z.int().min(0).max(1_000_000_000),role=z.enum(['admin','editor','reviewer','viewer']);
+const spaces=z.array(id).max(1000).refine(values=>new Set(values).size===values.length,'工作空间不能重复');
+const access={workspaceId:id,userId:id,role,workspaceIds:spaces,confirmed:z.literal(true)};
+export const memberCreateInput=z.strictObject({...access,name:z.string().trim().min(1).max(80).refine(value=>Array.from(value).every(character=>character.charCodeAt(0)>31&&character.charCodeAt(0)!==127),'姓名不能包含控制字符')});
+export const memberAccessInput=z.strictObject({...access,version});
+export const memberDirectoryScope=z.strictObject({workspaceId:id,cursor:id.optional(),limit:z.coerce.number().int().min(1).max(50).default(20)});
+export const memberDirectoryView=z.strictObject({workspaceId:id,canManageOrganization:z.boolean(),environment:z.enum(['mock','sandbox','live']),appEnv:z.enum(['development','sandbox','production']),workspaces:z.array(z.strictObject({id,name:z.string()})),members:z.array(z.strictObject({id,name:z.string(),role,workspaceIds:spaces,version,status:z.enum(['active','suspended']),provisioned:z.boolean()})),nextCursor:id.nullable(),events:z.array(z.strictObject({id,userId:id,action:z.enum(['member.create','member.access']),revision:version,createdAt:z.iso.datetime()}))});
+export type MemberCreate=z.infer<typeof memberCreateInput>;
+export type MemberAccess=z.infer<typeof memberAccessInput>;
+export type MemberDirectoryScope=z.infer<typeof memberDirectoryScope>;
+export type MemberDirectoryView=z.infer<typeof memberDirectoryView>;

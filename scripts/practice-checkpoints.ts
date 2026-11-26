@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {createHash} from 'node:crypto';
+import {fileDigest} from '../packages/media/src/files.js';
+const folder='docs/evidence/T30/practice',start=JSON.parse(fs.readFileSync(folder+'/start-source-audit.json','utf8')),previous=JSON.parse(fs.readFileSync(start.previousManifest,'utf8')),hash=(f:string)=>createHash('sha256').update(fs.readFileSync(f)).digest('hex'),output=process.argv[2]||folder+'/runtime/checkpoints.json';assert.ok(!fs.existsSync(output));
+for(const[file,sha]of Object.entries(start.oldStateFiles))assert.equal(hash(file),sha,file);
+for(const model of start.models as{file:string;sha256:string;bytes?:number;size?:number}[]){const actual=await fileDigest(model.file);assert.equal(actual.sha256,model.sha256,model.file);assert.equal(actual.size,model.bytes??model.size,model.file);}
+for(const[file,sha]of Object.entries(start.earlierFinalManifestSHA256))assert.equal(hash(file),sha,file);
+const backup=JSON.parse(fs.readFileSync(folder+'/runtime/upgrade-backup.json','utf8')),backupDist=path.join(path.dirname(backup.file),'dist-before'),oldCompiled:object[]=[];
+for(const[file,sha]of Object.entries(previous.compiledSHA256)){if(!file.startsWith('dist/'))continue;const saved=path.join(backupDist,file.slice('dist/'.length));assert.equal(hash(saved),sha,file);oldCompiled.push({original:file,privateBackupPreserved:true,sha256:sha});}
+const db=new DatabaseSync('storage/digitalguide.sqlite',{readOnly:true});let originalZip;
+try {const r=db.prepare('SELECT storage_key,size,sha256 FROM ae_source_exports WHERE id=?').get('9b139312-7cef-4b4c-a75b-368813914362') as {storage_key:string;size:number;sha256:string};assert.ok(r);const actual=await fileDigest(path.resolve('storage/objects',r.storage_key));assert.equal(actual.sha256,'ce541dc40789b0ad6fbc7a7553bcba6a1cb9f059949bb3067e0b7e65145d2563');assert.equal(actual.sha256,r.sha256);assert.equal(actual.size,r.size);originalZip={size:actual.size,sha256:actual.sha256};const state=JSON.parse(fs.readFileSync('storage/ae-media-preview-state.json','utf8'));assert.equal((db.prepare('SELECT count(*) n FROM ae_media_adoptions WHERE artifact_id=?').get(state.ids.artifact) as {n:number}).n,1);assert.equal((db.prepare('SELECT version FROM studio_projects WHERE id=?').get(state.ids.project) as {version:number}).version,1);}finally{db.close();}
+fs.writeFileSync(output,JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),oldStateFilesChecked:Object.keys(start.oldStateFiles).length,modelsAndRuntimeFilesChecked:start.models.length,earlierFinalManifestsChecked:Object.keys(start.earlierFinalManifestSHA256).length,oldCompiled,originalSourceZip:originalZip,sameSingleAdoptionAndProjectV1:true,wholeTaskOrPlatformCompleted:false},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:'PASS',oldStateFiles:Object.keys(start.oldStateFiles).length,models:start.models.length,earlierManifests:Object.keys(start.earlierFinalManifestSHA256).length}));

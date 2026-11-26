@@ -1,0 +1,23 @@
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { NavLink } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import type { Page, StudioDocument, StudioElement, StudioSegment } from '@digitalguide/contracts';
+import { api } from '../api.js';
+export const labels: Record<string, string> = { queued: '排队中', processing: '解析中', review: '待选页审阅', cancelled: '已取消', failed: '失败', training: '模拟训练中', awaiting_review: '待验收', accepted: '模拟验收完成', rejected: '已拒绝', unknown: '结果未知', revoked: '已撤销', rendering: '正在生成', succeeded: '预览完成', ready: '可查看', stale: '已过期' };
+export const seconds = (ms: number) => (ms / 1000).toLocaleString('zh-CN', { maximumFractionDigits: 1 }) + ' 秒';
+export function Note({ error }: { error: unknown }) { return error ? <p className="error" role="alert">{error instanceof Error ? error.message : String(error)}</p> : null; }
+export function StudioNav() { return <nav className="studio-nav" aria-label="创作导航">{[['/studio','工程'],['/studio/templates','模板'],['/studio/ae','AE 模板'],['/studio/brands','品牌素材'],['/studio/imports','PPT / PDF 导入'],['/studio/presentations','PPT逐页讲解'],['/studio/media','视频素材'],['/studio/packages','工程迁移'],['/studio/batches','批量生产'],['/studio/reviews','团队审核'],['/studio/frame-reviews','逐帧审阅'],['/studio/clones','克隆验收'],['/studio/voice','语气与配音'],['/studio/characters','形象与动作'],['/studio/content','内容来源'],['/studio/drafts','脚本与计划'],['/studio/assistant','聊天式局部编辑'],['/studio/recordings','录制与提词'],['/studio/processing','媒体加工'],['/studio/transcriptions','视频转写']].map(([to,name]) => <NavLink key={to} end to={to}>{name}</NavLink>)}</nav>; }
+export function useStudioList<T>(kind: string, workspaceId: string, extra = '', poll = false) {
+  return useInfiniteQuery({ queryKey: ['studio-list', workspaceId, kind, extra], enabled: !!workspaceId, initialPageParam: '', queryFn: ({ pageParam }) => api<Page<T>>('/' + kind + '?workspaceId=' + workspaceId + '&limit=30' + extra + (pageParam ? '&cursor=' + pageParam : '')), getNextPageParam: page => page.nextCursor || undefined, refetchInterval: poll ? 1500 : false });
+}
+export function ListState({ query,moreLabel='加载更多' }: { moreLabel?:string;query: { error: unknown; isPending: boolean; hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown } }) { return <><Note error={query.error}/>{query.isPending && <p role="status">正在读取…</p>}{query.hasNextPage && <button disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{moreLabel}</button>}</>; }
+export function Box({ title, children }: { title: string; children: ReactNode }) { return <section className="panel studio-box"><h2>{title}</h2>{children}</section>; }
+export function imageSource(e: Extract<StudioElement, { type: 'image' }>) { return '/api/v1/' + (e.assetId ? 'assets/' + e.assetId + '/content' : 'studio/import-media/' + e.importMediaId); }
+export function Board({ doc, segment }: { doc: StudioDocument; segment: StudioSegment }) {
+  const speaker = doc.speakers.find(s => s.id === segment.speakerId);
+  return <div className="studio-board" role="img" aria-label={'可编辑分镜布局：' + segment.title} style={{ aspectRatio: `${doc.canvas.width}/${doc.canvas.height}`, background: doc.canvas.transparent ? undefined : segment.backgroundColor, fontFamily: doc.brand.fontFamily === 'serif' ? 'serif' : 'sans-serif' }}>
+    {segment.elements.slice().sort((a,b) => a.zIndex - b.zIndex).map(e => <div key={e.id} className="studio-layer" style={{ left: e.x * 100 + '%', top: e.y * 100 + '%', width: e.width * 100 + '%', height: e.height * 100 + '%', zIndex: e.zIndex, opacity: e.opacity, ...(e.type === 'shape' ? { background: e.fill, borderRadius: e.shape === 'ellipse' ? '50%' : 0 } : {}) }}>{e.type === 'image' ? <img src={imageSource(e)} alt="分镜图片" style={{ objectFit: e.fit }}/> : e.type === 'text' ? <div style={{ color: e.color, fontWeight: e.bold ? 700 : 400, textAlign: e.align, fontSize: `clamp(8px, ${e.fontSize / doc.canvas.width * 46}vw, ${e.fontSize / doc.canvas.width * 700}px)` }}>{e.text}</div> : null}</div>)}
+    {speaker && <div className="studio-speaker-reference" style={{ left: segment.avatar.x * 100 + '%', top: segment.avatar.y * 100 + '%', width: segment.avatar.width * 100 + '%', height: segment.avatar.height * 100 + '%' }}>{speaker.avatarAssetId ? <img src={'/api/v1/assets/' + speaker.avatarAssetId + '/content'} alt={speaker.name + '原始形象参考'}/> : <span>{speaker.name}</span>}<small>静态形象参考</small></div>}
+    {doc.brand.logoAssetId && <img className="studio-logo" src={'/api/v1/assets/' + doc.brand.logoAssetId + '/content'} alt="品牌标志"/>}<span className="studio-board-label">编辑布局 · 非视频预览</span>
+  </div>;
+}

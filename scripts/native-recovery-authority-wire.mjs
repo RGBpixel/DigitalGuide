@@ -1,0 +1,17 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const sqlFile='migrations/postgres/128-native-recovery-authority.sql',source=fs.readFileSync('migrations/postgres/053-native-character-production.sql','utf8'),begin=source.indexOf('CREATE FUNCTION dg_native_character_dependencies('),end=source.indexOf('\nCREATE FUNCTION dg_native_character_motion_valid',begin);assert.ok(begin>0&&end>begin);let body=source.slice(begin,end).trim().replace('CREATE FUNCTION','CREATE OR REPLACE FUNCTION');const old="WHERE id=1 AND status='validation_only';";assert.equal(body.split(old).length,2);body=body.replace(old,()=>"WHERE id=1 AND(status='validation_only' OR dg_native_recovery_authority_context());");
+const guard=`-- R-009/R-058/R-059. A pure dependency inspection context permits precise
+-- invalidation in quarantine; it never changes runtime state or enables workers.
+CREATE FUNCTION dg_native_recovery_authority_context() RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $dg$
+DECLARE plan_value text:=current_setting('digitalguide.recovery_authority_plan',true);xid_value text:=current_setting('digitalguide.recovery_authority_xid',true);
+BEGIN
+ IF session_user IS DISTINCT FROM(SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname=current_schema()) OR xid_value IS DISTINCT FROM pg_current_xact_id_if_assigned()::text OR plan_value IS NULL OR NOT EXISTS(SELECT 1 FROM _dg_native_runtime_control WHERE id=1 AND status='recovery_quarantined' AND environment='mock') OR to_regclass('public._dg_native_recovery_control') IS NULL THEN RETURN false;END IF;
+ RETURN EXISTS(SELECT 1 FROM public._dg_native_recovery_control r JOIN _dg_native_recovery_journal_plans p ON p.backup_id=r.backup_id AND p.runtime_id=r.runtime_id JOIN _dg_native_recovery_journal_control c ON c.runtime_id=p.runtime_id AND c.stream_id=p.stream_id WHERE r.id=1 AND r.status='quarantined' AND r.schema_name=current_schema() AND p.id=plan_value AND p.status='pending' AND NOT EXISTS(SELECT 1 FROM _dg_native_recovery_journal_plans n WHERE n.backup_id=p.backup_id AND n.stream_id=p.stream_id AND n.generation>p.generation));
+END;$dg$;
+REVOKE ALL ON FUNCTION dg_native_recovery_authority_context() FROM PUBLIC;
+\n`;
+assert.equal(fs.existsSync('docs/evidence/T20/postgres-recovery-authority/128-first-committed.json'),false);fs.writeFileSync(sqlFile,guard+body+'\n',{flag:'wx'});const file='migrations/postgres/runtime.json',r=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(r.version,124);assert.equal(r.migrations.at(-1).name,'127-native-recovery-privacy.sql');r.version=125;r.migrations.push({name:sqlFile.split('/').at(-1),sha256:createHash('sha256').update(fs.readFileSync(sqlFile)).digest('hex')});fs.writeFileSync(file,JSON.stringify(r,null,2)+'\n');
+function change(f,from,to){const s=fs.readFileSync(f,'utf8');assert.equal(s.split(from).length,2,f);fs.writeFileSync(f,s.replace(from,()=>to));}
+change('packages/postgres/src/runtime-database.ts',"'127-native-recovery-privacy.sql'];","'127-native-recovery-privacy.sql','128-native-recovery-authority.sql'];");change('packages/postgres/src/runtime-database.ts','manifest.version!==124','manifest.version!==125');change('tests/unit/postgres-runtime.test.ts',"'127-native-recovery-privacy.sql']);","'127-native-recovery-privacy.sql','128-native-recovery-authority.sql']);");console.log(JSON.stringify({result:'PASS_RECOVERY_AUTHORITY_WIRING',runtime:125,migration:sqlFile,nextMigration:'129',sqlite:'052'}));

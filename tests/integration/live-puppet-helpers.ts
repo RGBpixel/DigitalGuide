@@ -1,0 +1,12 @@
+import {expect} from 'vitest';
+import type {Character,Asset,LiveOutputSettings,LiveOutputPlan,LiveOutput} from '@digitalguide/contracts';
+import {fixtureIds as f} from '../../packages/test-fixtures/src/seed.js';
+import {liveDefinitionFixture} from '../../packages/test-fixtures/src/live.js';
+import {livePuppetConfiguration} from '../../packages/test-fixtures/src/live-puppet.js';
+import {shareApi,type ShareHarness} from './share-helpers.js';
+import {speechSession,speechPlan} from './live-speech-helpers.js';
+import {outputSettings} from './live-output-helpers.js';
+export async function puppetCharacter(h:ShareHarness,kind:'illustration2d'|'model3d'='illustration2d'){
+ const api=shareApi(h),created=await api.good<{assetId:string;consentId:string;asset:Asset}>('/studio/characters/factory',{workspaceId:f.workspaceA,name:'原创二维直播源',kind:kind==='illustration2d'?'puppet2d':'mannequin3d',configuration:livePuppetConfiguration,rights:{subject:'原创虚构主持',proof:'平台原创参数角色用于本地直播验证',expiresAt:'2099-01-01T00:00:00.000Z',confirmed:true}}),character=await api.good<Character>('/studio/characters',{workspaceId:f.workspaceA,name:'原创二维直播主持',kind,visualStyle:'cartoon',sourceAssetId:created.assetId,sourceVersion:created.asset.version,consentId:created.consentId,expiresAt:'2098-12-31T00:00:00.000Z'});return{...created,character};
+}
+export async function puppetSession(h:ShareHarness){const d=liveDefinitionFixture();d.loop=true;d.maxDurationMs=180000;d.cues[0]={...d.cues[0],kind:'standby',durationMs:90000,text:'这是原创二维直播角色的实际系统播音。声音驱动口部，暂停和静音时闭口，继续以后从同一个位置播出。此例不是真人形象、声音或语气克隆。'};const p=await speechSession(h,d),source=await puppetCharacter(h),speech=await speechPlan(h,p),settings=outputSettings({speechPlanId:speech.plan.id,puppet:{characterId:source.character.id,characterVersion:source.character.version,placement:'left'}}),input={sessionId:p.session.id,sessionVersion:p.session.version,settings};return{...p,...source,...speech,settings,input,preflight:async(override:Partial<LiveOutputSettings>={})=>p.api.good<LiveOutputPlan>('/live-outputs/preflight',{...input,settings:{...settings,...override}}),prepare:async()=>{const plan=await p.api.good<LiveOutputPlan>('/live-outputs/preflight',input);expect(plan.canCreate,plan.problems.join('；')).toBe(true);const output=await p.api.good<LiveOutput>('/live-outputs',{...input,planHash:plan.hash,rightsConfirmed:true,confirmed:true});return{output,plan};}};}

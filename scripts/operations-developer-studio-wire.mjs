@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const replace=(file,from,to)=>{const value=fs.readFileSync(file,'utf8');assert.ok(value.includes(from),file+' missing expected fragment');fs.writeFileSync(file,value.replace(from,to));};
+for(const file of ['packages/postgres/src/runtime-database.ts','tests/unit/postgres-runtime.test.ts'])replace(file,"'140-native-developer-webhooks.sql']","'140-native-developer-webhooks.sql','141-native-developer-studio.sql']");
+replace('packages/postgres/src/runtime-database.ts','manifest.version!==137','manifest.version!==138');
+const manifestFile='migrations/postgres/runtime.json',manifest=JSON.parse(fs.readFileSync(manifestFile,'utf8'));assert.equal(manifest.version,137);manifest.version=138;manifest.migrations.push({name:'141-native-developer-studio.sql',sha256:createHash('sha256').update(fs.readFileSync('migrations/postgres/141-native-developer-studio.sql')).digest('hex')});fs.writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');
+replace('packages/postgres/src/runtime-bootstrap.ts','  const apiRole=identifier(input.application.user);',`  const apiRole=identifier(input.application.user);
+  await client.query('GRANT SELECT,INSERT ON developer_studio_grants,developer_studio_events,developer_studio_operations,developer_studio_job_origins TO '+apiRole);
+  await client.query('GRANT UPDATE(responsible_user_id,actions,enabled,expires_at,version,updated_at) ON developer_studio_grants TO '+apiRole);
+  await client.query('GRANT EXECUTE ON FUNCTION dg_native_developer_studio_job(text,text) TO '+identifier(input.worker.user));`);
+fs.appendFileSync('packages/contracts/src/index.ts',"\nexport * from './developer-studio.js';\n");
+console.log(JSON.stringify({result:'DEVELOPER_STUDIO_MIGRATIONS_WIRED_NOT_EXECUTED',plannedRuntime:138,sqliteMigration:'062',nextNative:'142'}));

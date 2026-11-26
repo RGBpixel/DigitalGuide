@@ -1,0 +1,9 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const replace=(file,from,to)=>{const s=fs.readFileSync(file,'utf8');assert.ok(s.includes(from),file);fs.writeFileSync(file,s.replace(from,()=>to));};
+const identity='packages/enterprise/src/identity-workflows.ts';let s=fs.readFileSync(identity,'utf8');assert.ok(!s.includes('import {scopedMemberName}'));s="import {scopedMemberName} from './member-name-sql.js';\n"+s;s=s.replace('SELECT m.user_id,u.name','SELECT m.user_id,${scopedMemberName(\'u\',\'m.tenant_id\',this.runtime.host.providerMode,this.runtime.host.appEnv)} AS name');fs.writeFileSync(identity,s);
+for(const file of ['apps/api/src/app.ts','apps/api/src/postgres-core-app.ts']){s=fs.readFileSync(file,'utf8');assert.ok(!s.includes('import {scopedMemberName}'));fs.writeFileSync(file,"import {scopedMemberName} from '../../../packages/enterprise/src/member-name-sql.js';\n"+s);}
+replace('apps/api/src/app.ts','SELECT u.id,u.name,t.name AS tenantName','SELECT u.id,${scopedMemberName(\'u\',\'m.tenant_id\',config.providerMode,config.appEnv)} AS name,t.name AS tenantName');
+replace('apps/api/src/app.ts',"repo.get<{ name: string }>('SELECT name FROM users WHERE id=?', p.userId)","repo.get<{name:string}>(`SELECT ${scopedMemberName('u','t.id',config.providerMode,config.appEnv)} AS name FROM users u CROSS JOIN tenants t WHERE u.id=? AND t.id=?`,p.userId,p.tenantId)");
+replace('apps/api/src/postgres-core-app.ts','SELECT u.id,u.name,t.name AS "tenantName"','SELECT u.id,${scopedMemberName(\'u\',\'m.tenant_id\',\'mock\',native.appEnv)} AS name,t.name AS "tenantName"');
+replace('apps/api/src/postgres-core-app.ts',"'SELECT u.name,t.name AS tenant_name FROM users u CROSS JOIN tenants t WHERE u.id=$1 AND t.id=$2'","`SELECT ${scopedMemberName('u','t.id','mock',native.appEnv)} AS name,t.name AS tenant_name FROM users u CROSS JOIN tenants t WHERE u.id=$1 AND t.id=$2`");

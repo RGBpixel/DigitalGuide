@@ -1,0 +1,7 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+assert.equal(fs.existsSync('docs/evidence/T35/operations-metrics/129-first-committed.json'),false);const grant="DO $dg$ DECLARE r text;BEGIN SELECT app_role INTO r FROM _dg_native_runtime_control WHERE id=1;EXECUTE format('GRANT EXECUTE ON FUNCTION dg_native_operations_metrics(text,integer,text) TO %I',r);END;$dg$;\n";
+for(const f of ['migrations/postgres/129-native-operations-metrics.sql','scripts/operations-metrics-migration.ts']){let s=fs.readFileSync(f,'utf8');assert.ok(s.includes(grant));s=s.replace(grant,()=> '');fs.writeFileSync(f,s);}
+const f='packages/postgres/src/runtime-bootstrap.ts';let s=fs.readFileSync(f,'utf8');const anchor='  const apiRole=identifier(input.application.user);';assert.ok(s.includes(anchor));s=s.replace(anchor,()=>anchor+"\n  await client.query('GRANT EXECUTE ON FUNCTION dg_native_operations_metrics(text,integer,text) TO '+apiRole);");fs.writeFileSync(f,s);
+const file='migrations/postgres/runtime.json',r=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(r.version,126);assert.equal(r.migrations.at(-1).name,'129-native-operations-metrics.sql');r.migrations.at(-1).sha256=createHash('sha256').update(fs.readFileSync('migrations/postgres/129-native-operations-metrics.sql')).digest('hex');fs.writeFileSync(file,JSON.stringify(r,null,2)+'\n');console.log('PASS grants follow runtime control creation; uncommitted SQL129 updated before first commit');

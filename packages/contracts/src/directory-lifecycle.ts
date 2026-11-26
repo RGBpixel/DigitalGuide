@@ -1,0 +1,12 @@
+import {z} from 'zod';
+const id=z.uuid(),revision=z.int().min(1).max(1_000_000_000),sha=z.string().regex(/^[a-f0-9]{64}$/),scope={tenantId:id,workspaceId:id,connectorId:id,userId:id};
+export const directoryErasureInput=z.strictObject({workspaceId:id,connectorId:id,userId:id,resourceVersion:revision});
+export const directoryErasureProof=z.strictObject({previewId:id,previewToken:sha,stateHash:sha,expiresAt:z.iso.datetime()});
+export const directoryErasureApply=z.strictObject({...directoryErasureInput.shape,...directoryErasureProof.shape,confirmed:z.literal(true)});
+export const directoryErasurePreview=z.strictObject({...scope,resourceVersion:revision,displayName:z.string().max(256),...directoryErasureProof.shape,globalNameDisposition:z.enum(['clear_exclusive','preserve_shared']),directoryPermissionsToWithdraw:z.boolean(),bindingsToDisable:z.int().min(0).max(1000),scope:z.literal('directory_profile_and_exclusive_account_name')});
+export const directoryErasureResult=z.strictObject({...scope,receiptId:id,resourceVersion:revision,origin:z.enum(['scim_delete','administrator']),globalNameDisposition:z.enum(['cleared_exclusive','preserved_shared']),bindingsDisabled:z.int().min(0).max(1000),clearedAt:z.iso.datetime()});
+export const directoryProfileErasureView=z.strictObject({receiptId:id,clearedAt:z.iso.datetime(),globalNameDisposition:z.enum(['cleared_exclusive','preserved_shared'])});
+export type DirectoryErasureInput=z.infer<typeof directoryErasureInput>;
+export type DirectoryErasureApply=z.infer<typeof directoryErasureApply>;
+export type DirectoryErasurePreview=z.infer<typeof directoryErasurePreview>;
+export type DirectoryErasureResult=z.infer<typeof directoryErasureResult>;

@@ -1,0 +1,35 @@
+import fs from 'node:fs';
+import {spawn,type ChildProcessWithoutNullStreams} from 'node:child_process';
+import {PNG} from 'pngjs';
+import * as ort from 'onnxruntime-web';
+import {AppError} from '@digitalguide/domain';
+import type {MediaProcessingPayload,TrackingTraceFrame} from '@digitalguide/contracts';
+import {requireForegroundEngine} from './segmentation-model.js';
+import {segmentationTensor} from './neural-segmentation.js';
+import {ForegroundTracker,renderTrackedCrop} from './foreground-tracking.js';
+import {mediaTools} from './media-tools.js';
+import {mp4InputOptions} from './video-source.js';
+
+export async function runNeuralTracking(input:{root:string;payload:MediaProcessingPayload;file:string;destination:string;outWidth:number;outHeight:number;startMs:number;durationMs:number|null;alpha:boolean},signal:AbortSignal,onProgress:(fraction:number)=>void){
+ const {root,payload,file,destination,outWidth,outHeight,startMs,durationMs,alpha}=input,c=payload.configuration;if(c.operation!=='subject_tracking'||c.provider!=='local-media'||!c.tracking)throw new AppError('TRACKING_CONFIGURATION','主体跟踪只接受已审阅的本机模型与起始点方案。',409);const profile=requireForegroundEngine(root,payload,true),width=payload.source.specs.width,height=payload.source.specs.height,image=payload.source.mediaType==='image/png',fps=image?1:Math.min(60,payload.source.specs.fps),expectedFrames=image?1:Math.max(1,Math.round(durationMs!*fps/1000)),stride=Math.max(1,Math.ceil(expectedFrames/1198)),trace:TrackingTraceFrame[]=[],tracker=new ForegroundTracker(c.tracking,width,height,.35+c.strength*.3);let lastTrace:TrackingTraceFrame|undefined;
+ if(!Number.isFinite(fps)||fps<=0)throw new AppError('TRACKING_FRAME_RATE','原片帧率无效，请重新检查视频。',409);signal.throwIfAborted();ort.env.wasm.numThreads=1;ort.env.wasm.proxy=false;ort.env.logLevel='error';const opened=performance.now(),session=await ort.InferenceSession.create(fs.readFileSync(profile.file),{executionProviders:['wasm'],graphOptimizationLevel:'all'}),metrics:Record<string,number>={modelVerified:1,trackingPolicyVerified:1,modelInputWidth:320,modelInputHeight:320,runtimeThreads:1,wasmExecution:1,modelLoadMs:performance.now()-opened,framesInferred:0,framesFollowed:0,framesHeld:0,letterboxedFrames:0,inferenceMs:0,renderMs:0};
+ try{
+  if(session.inputNames[0]!=='input.1'||session.outputNames[0]!=='1959')throw new AppError('TRACKING_MODEL_SIGNATURE','跟踪模型签名与已批准引擎不符。',409);
+  async function frame(bytes:Buffer){
+   signal.throwIfAborted();const started=performance.now(),index=metrics.framesInferred,output=await session.run({'input.1':new ort.Tensor('float32',segmentationTensor(bytes,width,height),[1,3,320,320])},['1959']),prediction=output['1959'];signal.throwIfAborted();if(prediction.type!=='float32'||prediction.dims.join(',')!=='1,1,320,320')throw new AppError('TRACKING_MODEL_OUTPUT','跟踪模型返回了不同规格的遮罩。',409);metrics.inferenceMs+=performance.now()-started;const timeMs=image?0:Math.round((Math.round(startMs*fps/1000)+index)*1000/fps),point=tracker.update(prediction.data as Float32Array,bytes,timeMs,index);lastTrace=point;if(index===0||index%stride===0)trace.push(point);metrics.framesInferred++;metrics[point.status==='tracking'?'framesFollowed':'framesHeld']++;if(point.crop.x<0||point.crop.y<0||point.crop.x+point.crop.width>1.00001||point.crop.y+point.crop.height>1.00001)metrics.letterboxedFrames++;const rendering=performance.now(),rgba=renderTrackedCrop(bytes,width,height,point.crop,outWidth,outHeight,alpha);metrics.renderMs+=performance.now()-rendering;return rgba;
+  }
+  if(image){const png=PNG.sync.read(fs.readFileSync(file));if(png.width!==width||png.height!==height)throw new AppError('TRACKING_SOURCE_CHANGED','原图片规格已变化。',409);const result=new PNG({width:outWidth,height:outHeight});result.data=await frame(png.data);signal.throwIfAborted();fs.writeFileSync(destination,PNG.sync.write(result),{flag:'wx'});onProgress(1);}
+  else{
+   const firstFrame=Math.round(startMs*fps/1000),time=(firstFrame/fps).toFixed(6),length=(expectedFrames/fps).toFixed(6),tools=mediaTools(root),frameBytes=width*height*4,decode=['-v','error','-nostdin','-threads','2',...mp4InputOptions,'-i',file,'-t',length,'-map','0:v:0','-an','-vf',`fps=${fps},trim=start_frame=${firstFrame}:end_frame=${firstFrame+expectedFrames},setpts=PTS-STARTPTS,scale=${width}:${height},format=rgba`,'-threads','2','-f','rawvideo','pipe:1'],encode=['-v','error','-nostdin','-n','-threads','2','-f','rawvideo','-pixel_format','rgba','-video_size',`${outWidth}x${outHeight}`,'-framerate',String(fps),'-probesize','32','-i','pipe:0',...(payload.source.specs.hasAudio?[...mp4InputOptions,'-ss',time,'-i',file]:[]),'-t',length,'-map','0:v:0',...(payload.source.specs.hasAudio?['-map','1:a:0','-c:a','aac','-ar',String(payload.source.specs.sampleRate),'-ac',String(payload.source.specs.channels)]:['-an']),...(alpha?['-c:v','prores_ks','-profile:v','4','-pix_fmt','yuva444p10le','-alpha_bits','16']:['-c:v','libx264','-preset','veryfast','-crf','18','-pix_fmt','yuv420p','-movflags','+faststart']),'-threads','2','-fs',String(alpha?1073741825:134217729),destination],children:ChildProcessWithoutNullStreams[]=[];
+   function child(args:string[]){const p=spawn(tools.ffmpeg,args,{windowsHide:true,stdio:['pipe','pipe','pipe'],signal});p.stdin.on('error',()=>{});p.stderr.resume();p.stdout.pause();children.push(p);const closed=new Promise<{code:number|null;error?:Error}>(resolve=>{let error:Error|undefined;p.on('error',e=>{error=e;});p.once('close',code=>resolve({code,error}));});return{process:p,closed};}
+   const decoder=child(decode),encoder=child(encode),pending=Buffer.allocUnsafe(frameBytes);encoder.process.stdout.resume();let filled=0;
+   try{
+    for await(const data of decoder.process.stdout){signal.throwIfAborted();const chunk=data as Buffer;let offset=0;while(offset<chunk.length){const take=Math.min(frameBytes-filled,chunk.length-offset);chunk.copy(pending,filled,offset,offset+take);filled+=take;offset+=take;if(filled===frameBytes){const rgba=await frame(pending);filled=0;if(metrics.framesInferred>expectedFrames+1)throw new AppError('TRACKING_FRAME_COUNT','跟踪帧数超出已确认区间。',409);await new Promise<void>((resolve,reject)=>encoder.process.stdin.write(rgba,error=>error?reject(error):resolve()));onProgress(Math.min(.99,metrics.framesInferred/expectedFrames));}}}
+    encoder.process.stdin.end();const[d,e]=await Promise.all([decoder.closed,encoder.closed]);signal.throwIfAborted();if(d.code!==0||e.code!==0||d.error||e.error||filled||!metrics.framesInferred||Math.abs(metrics.framesInferred-expectedFrames)>1)throw new AppError('TRACKING_VIDEO_INCOMPLETE','主体跟随视频没有覆盖完整区间，请核对原片或可用空间后重试。',409);metrics.expectedFrames=expectedFrames;metrics.outputFps=fps;onProgress(1);
+   }finally{for(const p of children)if(p.exitCode===null&&p.signalCode===null)p.kill();await Promise.allSettled([decoder.closed,encoder.closed]);}
+  }
+  if(lastTrace&&trace.at(-1)?.frame!==lastTrace.frame){if(trace.length>=1200)trace[trace.length-1]=lastTrace;else trace.push(lastTrace);}requireForegroundEngine(root,payload,true);signal.throwIfAborted();return{metrics,tracking:trace};
+ }finally{await session.release();}
+}
+
+

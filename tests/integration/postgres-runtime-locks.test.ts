@@ -1,0 +1,18 @@
+import {randomUUID} from 'node:crypto';
+import {beforeAll,afterAll,describe,it,expect} from 'vitest';
+import {nativeRuntimeFixture} from './postgres-runtime-helpers.js';
+import {nativePostgresAvailable} from './postgres-native-cluster.js';
+import {NativeLive} from '../../packages/postgres/src/runtime-live.js';
+import {canonical} from '../../packages/domain/src/index.js';
+
+describe.skipIf(!nativePostgresAvailable)('R-058原生事务锁复用与真实数据库排他性',()=>{
+ let x:Awaited<ReturnType<typeof nativeRuntimeFixture>>;
+ beforeAll(async()=>{x=await nativeRuntimeFixture();},120000);afterAll(async()=>{await x?.close();},120000);
+ const other=(key:string,shared=true)=>x.owner(async c=>{await c.query('BEGIN');try{return(await c.query<{acquired:boolean}>('SELECT '+(shared?'pg_try_advisory_xact_lock_shared':'pg_try_advisory_xact_lock')+'(hashtextextended($1,0)) AS acquired',[key])).rows[0].acquired;}finally{await c.query('ROLLBACK');}});
+ it('同事务复用独占锁及后续读取时，其他连接仍被阻挡到提交',async()=>{const key=randomUUID();await x.workerDb.transaction(async()=>{await x.workerDb.advisoryLock(key,true);await x.workerDb.advisoryLock(key,true);await x.workerDb.advisoryLock(key);expect(await other(key)).toBe(false);});expect(await other(key)).toBe(true);});
+ it('回滚后下一事务必须重新获取数据库锁，不能使用进程级旧记录',async()=>{const key=randomUUID();let observed=false;await expect(x.workerDb.transaction(async()=>{await x.workerDb.advisoryLock(key,true);expect(await other(key)).toBe(false);observed=true;throw new Error('contract rollback');})).rejects.toMatchObject({code:'PG_OPERATION_FAILED'});expect(observed).toBe(true);expect(await other(key)).toBe(true);await x.workerDb.transaction(async()=>{await x.workerDb.advisoryLock(key,true);expect(await other(key)).toBe(false);});expect(await other(key)).toBe(true);});
+ it('共享锁可以升级为独占锁，事务外调用不能由旧记录放行',async()=>{const key=randomUUID();await expect(x.workerDb.advisoryLock(key,true)).rejects.toMatchObject({code:'PG_TRANSACTION_REQUIRED'});await x.workerDb.transaction(async()=>{await x.workerDb.advisoryLock(key);expect(await other(key)).toBe(true);expect(await other(key,false)).toBe(false);await x.workerDb.advisoryLock(key,true);expect(await other(key)).toBe(false);});expect(await other(key,false)).toBe(true);});
+ it('保存点回滚释放锁后，后续调用会重新获取真实锁',async()=>{const key=randomUUID();await x.workerDb.transaction(async()=>{await x.workerDb.query('SAVEPOINT sample');await x.workerDb.advisoryLock(key,true);expect(await other(key)).toBe(false);await x.workerDb.query('ROLLBACK TO SAVEPOINT sample');expect(await other(key)).toBe(true);await x.workerDb.advisoryLock(key,true);expect(await other(key)).toBe(false);});});
+ it('节目帧允许并行观察，仍然阻挡素材修改和普通场控写入',async()=>{const service=new NativeLive(x.repo,x.config.root),workspace='20000000-0000-4000-8000-000000000001';await x.workerDb.transaction(async()=>{const p=await x.repo.principal('30000000-0000-4000-8000-000000000001');await service.frameScope(p,workspace);const asset=canonical(['native-asset-workspace',p.tenantId,workspace]),live=canonical(['native-live-tenant',p.tenantId,x.config.appEnv]);expect(await other(asset)).toBe(true);expect(await other(asset,false)).toBe(false);expect(await other(live,false)).toBe(false);});});
+ it('帧写入仍需当前开播权限和工作空间，观察权限不能代替',async()=>{const service=new NativeLive(x.repo,x.config.root);await expect(x.workerDb.transaction(async()=>{const p=await x.repo.principal('30000000-0000-4000-8000-000000000001');await service.frameScope({...p,role:'viewer'},p.workspaceIds[0]);})).rejects.toMatchObject({code:'FORBIDDEN'});await expect(x.workerDb.transaction(async()=>{const p=await x.repo.principal('30000000-0000-4000-8000-000000000001');await service.frameScope(p,randomUUID());})).rejects.toMatchObject({code:'NOT_FOUND'});});
+});

@@ -1,0 +1,71 @@
+-- Reject unavailable inventory capacity before mutation, with a structured error.
+CREATE OR REPLACE FUNCTION dg_native_restaurant_apply(target text,action_value text,input jsonb) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $dg$
+DECLARE m memberships%ROWTYPE;r restaurants%ROWTYPE;v venues%ROWTYPE;t restaurant_tables%ROWTYPE;i restaurant_menu_items%ROWTYPE;s restaurant_menu_skus%ROWTYPE;g restaurant_staff%ROWTYPE;kind_value text;meta jsonb;body jsonb;sku jsonb;resource_value text;resource_type_value text;manager_value boolean:=action_value<>'table_state';grant_value bigint;epoch_value bigint;version_value bigint;created text:=dg_utc_now();operation_value text:=gen_random_uuid()::text;expires_value text;reserved_value bigint;
+BEGIN
+ m:=dg_native_restaurant_actor();
+ IF action_value NOT IN('create','update','grant','table_create','table_update','table_state','item_create','item_update','stock') THEN PERFORM dg_native_restaurant_error('VALIDATION_FAILED');END IF;
+ kind_value:=CASE WHEN action_value='create' THEN 'venue' WHEN action_value IN('table_update','table_state') THEN 'table' WHEN action_value='item_update' THEN 'item' WHEN action_value='stock' THEN 'sku' ELSE 'restaurant' END;
+ meta:=dg_native_restaurant_prepare(kind_value,CASE WHEN action_value='create' THEN input->>'venueId' ELSE target END,manager_value,true,CASE WHEN action_value='grant' THEN input->>'userId' END);
+ IF action_value='create' THEN
+  IF input->>'venueId' IS DISTINCT FROM target THEN PERFORM dg_native_restaurant_error('VALIDATION_FAILED');END IF;
+  body:=input-'venueId';PERFORM dg_native_restaurant_validate_config(body,m.tenant_id,meta->>'workspaceId');SELECT * INTO v FROM venues WHERE id=target;IF NOT EXISTS(SELECT 1 FROM pg_timezone_names WHERE name=v.timezone) THEN PERFORM dg_native_restaurant_error('VALIDATION_FAILED');END IF;
+  IF EXISTS(SELECT 1 FROM restaurants WHERE venue_id=target AND environment='mock' AND app_env=(SELECT app_env FROM _dg_native_runtime_control WHERE id=1)) THEN PERFORM dg_native_restaurant_error('RESTAURANT_EXISTS');END IF;
+  resource_value:=gen_random_uuid()::text;resource_type_value:='restaurant';
+  INSERT INTO restaurants(id,tenant_id,workspace_id,venue_id,name,timezone,public_guide,profile_id,scene_app_id,hold_seconds,visit_minutes,late_minutes,accepting_guests,opening_windows,environment,app_env,created_at,updated_at) VALUES(resource_value,m.tenant_id,v.workspace_id,v.id,btrim(body->>'name'),v.timezone,body->>'publicGuide',body->>'profileId',body->>'sceneAppId',(body->>'holdSeconds')::bigint,(body->>'visitMinutes')::bigint,(body->>'lateMinutes')::bigint,dg_native_restaurant_bit(body->'acceptingGuests'),(body->'openingWindows')::text,'mock',(SELECT app_env FROM _dg_native_runtime_control WHERE id=1),created,created);
+  INSERT INTO _dg_native_restaurant_origins VALUES(resource_value,(SELECT runtime_id FROM _dg_native_runtime_control WHERE id=1),m.user_id,m.tenant_id,v.workspace_id,created,pg_current_xact_id()::text);SELECT * INTO r FROM restaurants WHERE id=resource_value;grant_value:=0;
+ ELSE
+  SELECT * INTO r FROM restaurants WHERE id=meta->>'restaurantId';grant_value:=dg_native_restaurant_role(r.id,manager_value);resource_value:=r.id;resource_type_value:='restaurant';
+  IF action_value IN('update','grant','table_update','table_state','item_update','stock') THEN version_value:=dg_native_restaurant_integer(input->'version',CASE WHEN action_value='grant' THEN 0 ELSE 1 END,9007199254740991);END IF;
+  CASE action_value
+  WHEN 'update' THEN
+   body:=input-'version';PERFORM dg_native_restaurant_validate_config(body,r.tenant_id,r.workspace_id);IF r.version<>version_value THEN PERFORM dg_native_restaurant_error('VERSION_CONFLICT');END IF;
+   UPDATE restaurants SET name=btrim(body->>'name'),public_guide=body->>'publicGuide',profile_id=body->>'profileId',scene_app_id=body->>'sceneAppId',hold_seconds=(body->>'holdSeconds')::bigint,visit_minutes=(body->>'visitMinutes')::bigint,late_minutes=(body->>'lateMinutes')::bigint,accepting_guests=dg_native_restaurant_bit(body->'acceptingGuests'),opening_windows=(body->'openingWindows')::text,version=version+1,updated_at=created WHERE id=r.id;
+  WHEN 'grant' THEN
+   PERFORM dg_native_restaurant_fields(input,ARRAY['userId','role','enabled','expiresAt','version']);IF input->>'role' NOT IN('manager','host','kitchen') OR input->>'role' IS NULL THEN PERFORM dg_native_restaurant_error('VALIDATION_FAILED');END IF;PERFORM dg_native_restaurant_bit(input->'enabled');
+   IF NOT dg_native_office_member(input->>'userId',r.tenant_id,r.workspace_id,false) THEN PERFORM dg_native_restaurant_error('NOT_FOUND');END IF;
+   IF m.user_id=input->>'userId' AND m.role<>'admin' THEN PERFORM dg_native_restaurant_error('SELF_GRANT_LOCKED');END IF;
+   SELECT * INTO g FROM restaurant_staff WHERE restaurant_id=r.id AND user_id=input->>'userId';IF coalesce(g.version,0)<>version_value THEN PERFORM dg_native_restaurant_error('VERSION_CONFLICT');END IF;
+   IF input->>'expiresAt' IS NOT NULL THEN BEGIN expires_value:=dg_native_people_iso((input->>'expiresAt')::timestamptz);EXCEPTION WHEN OTHERS THEN PERFORM dg_native_restaurant_error('VALIDATION_FAILED');END;IF expires_value<=created THEN PERFORM dg_native_restaurant_error('GRANT_EXPIRED');END IF;END IF;
+   INSERT INTO restaurant_staff(restaurant_id,user_id,role,enabled,expires_at) VALUES(r.id,input->>'userId',input->>'role',dg_native_restaurant_bit(input->'enabled'),expires_value) ON CONFLICT(restaurant_id,user_id) DO UPDATE SET role=excluded.role,enabled=excluded.enabled,expires_at=excluded.expires_at,version=restaurant_staff.version+1;resource_type_value:='staff';
+  WHEN 'table_create','table_update' THEN
+   IF action_value='table_update' THEN PERFORM dg_native_restaurant_fields(input,ARRAY['version','table']);body:=input->'table';SELECT * INTO t FROM restaurant_tables WHERE id=target;IF t.version<>version_value THEN PERFORM dg_native_restaurant_error('VERSION_CONFLICT');END IF;ELSE body:=input;END IF;PERFORM dg_native_restaurant_table_fields(body);
+   IF EXISTS(SELECT 1 FROM restaurant_tables WHERE restaurant_id=r.id AND code=upper(body->>'code') AND id<>coalesce(t.id,'')) THEN PERFORM dg_native_restaurant_error('DUPLICATE_TABLE_CODE');END IF;
+   IF t.id IS NULL THEN
+    IF(SELECT count(*) FROM restaurant_tables WHERE restaurant_id=r.id)>=200 THEN PERFORM dg_native_restaurant_error('TABLE_LIMIT');END IF;resource_value:=gen_random_uuid()::text;
+    INSERT INTO restaurant_tables(id,restaurant_id,code,name,capacity,min_party_size,zone,x,y,width,height,enabled) VALUES(resource_value,r.id,upper(body->>'code'),btrim(body->>'name'),(body->>'capacity')::bigint,(body->>'minPartySize')::bigint,btrim(body->>'zone'),(body->>'x')::double precision,(body->>'y')::double precision,(body->>'width')::double precision,(body->>'height')::double precision,dg_native_restaurant_bit(body->'enabled'));
+   ELSE
+    IF EXISTS(SELECT 1 FROM dining_occupancies WHERE table_id=t.id AND state IN('held','seated')) THEN PERFORM dg_native_restaurant_error('TABLE_BUSY');END IF;
+    IF EXISTS(SELECT 1 FROM dining_reservations b JOIN dining_parties p ON p.id=b.party_id WHERE b.table_id=t.id AND b.status IN('confirmed','checked_in') AND b.ends_at>created AND(dg_native_restaurant_bit(body->'enabled')=0 OR p.size>(body->>'capacity')::bigint OR p.size<(body->>'minPartySize')::bigint)) THEN PERFORM dg_native_restaurant_error('RESERVATION_CONFLICT');END IF;
+    UPDATE restaurant_tables SET code=upper(body->>'code'),name=btrim(body->>'name'),capacity=(body->>'capacity')::bigint,min_party_size=(body->>'minPartySize')::bigint,zone=btrim(body->>'zone'),x=(body->>'x')::double precision,y=(body->>'y')::double precision,width=(body->>'width')::double precision,height=(body->>'height')::double precision,enabled=dg_native_restaurant_bit(body->'enabled'),version=version+1 WHERE id=t.id;resource_value:=t.id;
+   END IF;resource_type_value:='table';
+  WHEN 'table_state' THEN
+   PERFORM dg_native_restaurant_fields(input,ARRAY['version','action','confirmed']);IF input->'confirmed' IS DISTINCT FROM 'true'::jsonb OR input->>'action' NOT IN('open','clean','block') OR input->>'action' IS NULL THEN PERFORM dg_native_restaurant_error('VALIDATION_FAILED');END IF;SELECT * INTO t FROM restaurant_tables WHERE id=target;IF t.version<>version_value THEN PERFORM dg_native_restaurant_error('VERSION_CONFLICT');END IF;IF EXISTS(SELECT 1 FROM dining_occupancies WHERE table_id=t.id AND state IN('held','seated')) THEN PERFORM dg_native_restaurant_error('TABLE_BUSY');END IF;
+   UPDATE restaurant_tables SET operation=CASE input->>'action' WHEN 'clean' THEN 'cleaning' WHEN 'block' THEN 'blocked' ELSE 'open' END,version=version+1 WHERE id=t.id;resource_value:=t.id;resource_type_value:='table';
+  WHEN 'item_create','item_update' THEN
+   IF action_value='item_update' THEN PERFORM dg_native_restaurant_fields(input,ARRAY['version','item']);body:=input->'item';SELECT * INTO i FROM restaurant_menu_items WHERE id=target;IF i.version<>version_value THEN PERFORM dg_native_restaurant_error('VERSION_CONFLICT');END IF;ELSE body:=input;END IF;PERFORM dg_native_restaurant_item_fields(body);
+   IF i.id IS NULL THEN
+    IF(SELECT count(*) FROM restaurant_menu_items WHERE restaurant_id=r.id)>=500 THEN PERFORM dg_native_restaurant_error('MENU_LIMIT');END IF;resource_value:=gen_random_uuid()::text;
+    INSERT INTO restaurant_menu_items(id,restaurant_id,name,category,description,ingredient_tags,allergen_tags,may_contain_tags,allergen_info_complete,flavor_tags,spice_level,is_new,listed) VALUES(resource_value,r.id,btrim(body->>'name'),btrim(body->>'category'),body->>'description',(body->'ingredientTags')::text,(body->'allergenTags')::text,(body->'mayContainTags')::text,dg_native_restaurant_bit(body->'allergenInfoComplete'),(body->'flavorTags')::text,(body->>'spiceLevel')::bigint,dg_native_restaurant_bit(body->'isNew'),dg_native_restaurant_bit(body->'listed'));
+   ELSE
+    resource_value:=i.id;UPDATE restaurant_menu_items SET name=btrim(body->>'name'),category=btrim(body->>'category'),description=body->>'description',ingredient_tags=(body->'ingredientTags')::text,allergen_tags=(body->'allergenTags')::text,may_contain_tags=(body->'mayContainTags')::text,allergen_info_complete=dg_native_restaurant_bit(body->'allergenInfoComplete'),flavor_tags=(body->'flavorTags')::text,spice_level=(body->>'spiceLevel')::bigint,is_new=dg_native_restaurant_bit(body->'isNew'),listed=dg_native_restaurant_bit(body->'listed'),version=version+1 WHERE id=i.id;
+    UPDATE restaurant_menu_skus SET archived=1,version=version+1 WHERE item_id=i.id AND archived=0 AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(body->'skus') z WHERE z->>'id'=restaurant_menu_skus.id);
+   END IF;
+   FOR sku IN SELECT jsonb_array_elements(body->'skus') LOOP
+    IF sku->>'id' IS NOT NULL THEN
+     SELECT * INTO s FROM restaurant_menu_skus WHERE id=sku->>'id' AND restaurant_id=r.id AND item_id=resource_value FOR UPDATE;IF s.id IS NULL THEN PERFORM dg_native_restaurant_error('SKU_NOT_FOUND');END IF;
+     SELECT coalesce(sum(quantity),0) INTO reserved_value FROM restaurant_inventory_reservations WHERE sku_id=s.id AND status='reserved' AND tracked=1;
+     IF reserved_value>0 AND(dg_native_restaurant_bit(sku->'stockTracked')=0 OR reserved_value+(sku->>'stockRemaining')::bigint>1000000) THEN PERFORM dg_native_restaurant_error('INVENTORY_BUSY');END IF;
+     UPDATE restaurant_menu_skus SET name=btrim(sku->>'name'),price_minor=(sku->>'priceMinor')::bigint,stock_tracked=dg_native_restaurant_bit(sku->'stockTracked'),stock_remaining=(sku->>'stockRemaining')::bigint,on_sale=dg_native_restaurant_bit(sku->'onSale'),portion_people=(sku->>'portionPeople')::bigint,archived=0,version=version+1 WHERE id=s.id;
+    ELSE INSERT INTO restaurant_menu_skus(id,item_id,restaurant_id,name,price_minor,stock_tracked,stock_remaining,on_sale,portion_people) VALUES(gen_random_uuid()::text,resource_value,r.id,btrim(sku->>'name'),(sku->>'priceMinor')::bigint,dg_native_restaurant_bit(sku->'stockTracked'),(sku->>'stockRemaining')::bigint,dg_native_restaurant_bit(sku->'onSale'),(sku->>'portionPeople')::bigint);END IF;
+   END LOOP;UPDATE restaurants SET menu_version=menu_version+1,updated_at=created WHERE id=r.id;resource_type_value:='item';
+  WHEN 'stock' THEN
+   PERFORM dg_native_restaurant_fields(input,ARRAY['version','quantity','reason']);PERFORM dg_native_restaurant_integer(input->'quantity',0,1000000);PERFORM dg_native_restaurant_text(input->'reason',1,120);SELECT * INTO s FROM restaurant_menu_skus WHERE id=target;IF s.version<>version_value THEN PERFORM dg_native_restaurant_error('VERSION_CONFLICT');END IF;IF s.stock_tracked<>1 THEN PERFORM dg_native_restaurant_error('STOCK_UNTRACKED');END IF;SELECT coalesce(sum(quantity),0) INTO reserved_value FROM restaurant_inventory_reservations WHERE sku_id=s.id AND status='reserved' AND tracked=1;IF reserved_value+(input->>'quantity')::bigint>1000000 THEN PERFORM dg_native_restaurant_error('INVENTORY_BUSY');END IF;
+   INSERT INTO restaurant_stock_adjustments VALUES(gen_random_uuid()::text,r.id,s.id,m.user_id,s.stock_remaining,(input->>'quantity')::bigint,btrim(input->>'reason'),created);UPDATE restaurant_menu_skus SET stock_remaining=(input->>'quantity')::bigint,version=version+1 WHERE id=s.id;UPDATE restaurant_menu_items SET version=version+1 WHERE id=s.item_id;UPDATE restaurants SET menu_version=menu_version+1,updated_at=created WHERE id=r.id;resource_value:=s.item_id;resource_type_value:='item';
+  ELSE PERFORM dg_native_restaurant_error('VALIDATION_FAILED');END CASE;
+ END IF;
+ SELECT coalesce((SELECT epoch FROM _dg_native_restaurant_member_epochs WHERE user_id=m.user_id),0) INTO epoch_value;
+ INSERT INTO _dg_native_restaurant_operations VALUES(operation_value,r.id,m.user_id,epoch_value,grant_value,manager_value,resource_type_value,resource_value,action_value,encode(sha256(convert_to(input::text,'UTF8')),'hex'),created,pg_current_xact_id()::text);
+ INSERT INTO audit_events(id,tenant_id,workspace_id,actor_id,action,resource_id,outcome,request_id,created_at) VALUES(gen_random_uuid()::text,r.tenant_id,r.workspace_id,m.user_id,'restaurant.'||action_value,resource_value,'confirmed',operation_value,created);
+ RETURN operation_value;
+END;$dg$;
+

@@ -1,0 +1,22 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+const replace = (file, from, to) => { const s = fs.readFileSync(file, 'utf8'); assert.ok(s.includes(from), file + ' expected fragment missing'); fs.writeFileSync(file, s.replace(from, () => to)); };
+replace('apps/api/src/app.ts', "import {scopedMemberName}", "import {registerDeveloperRoutes} from './developer-routes.js';\nimport {DeveloperWorkflows} from '../../../packages/enterprise/src/developer-workflows.js';\nimport {scopedMemberName}");
+replace('apps/api/src/app.ts', "if (req.routeOptions.url?.startsWith('/api/v1/scim/v2/')) return;", "if (req.routeOptions.url?.startsWith('/api/v1/scim/v2/') || req.routeOptions.url?.startsWith('/api/open/v1/')) return;");
+replace('apps/api/src/app.ts', 'enterpriseDirectoryLifecycleAvailable:!config.recoveryValidationOnly', 'developerAccessAvailable:!config.recoveryValidationOnly,enterpriseDirectoryLifecycleAvailable:!config.recoveryValidationOnly');
+replace('apps/api/src/app.ts', '  registerResourceShelfRoutes(app,repo,config,send);', "  registerDeveloperRoutes(app,new DeveloperWorkflows(config,new IdentityWorkflows(identityRuntime)),new SqliteIdentityStore(repo),(req,write,work)=>{const session=authenticatedSession(repo,req,config);if(write&&req.headers['x-csrf-token']!==session.csrfToken)throw new AppError('FORBIDDEN','安全凭证已失效，请刷新后重试。',403);return work(session.principal);},send);\n  registerResourceShelfRoutes(app,repo,config,send);");
+replace('apps/api/src/postgres-identity-routes.ts', "import {DirectoryWorkflows}", "import {registerDeveloperRoutes} from './developer-routes.js';\nimport {DeveloperWorkflows} from '../../../packages/enterprise/src/developer-workflows.js';\nimport {DirectoryWorkflows}");
+replace('apps/api/src/postgres-identity-routes.ts', ' const members=new MemberWorkflows(workflow);', " registerDeveloperRoutes(app,new DeveloperWorkflows({providerMode:'mock',appEnv:db.config.appEnv},workflow,true),store,(req,write,work)=>scoped(req,write,({principal})=>Promise.resolve(work(principal))),send);\n const members=new MemberWorkflows(workflow);");
+replace('apps/api/src/postgres-core-app.ts', 'enterpriseDirectoryLifecycleAvailable:true', 'developerAccessAvailable:true,enterpriseDirectoryLifecycleAvailable:true');
+replace('packages/contracts/src/index.ts', 'enterpriseDirectoryLifecycleAvailable?:boolean;', 'developerAccessAvailable?:boolean;enterpriseDirectoryLifecycleAvailable?:boolean;');
+fs.appendFileSync('packages/contracts/src/index.ts', "\nexport * from './developer-access.js';\nimport {registerDeveloperAccessSpec} from './developer-access-openapi.js';\nregisterDeveloperAccessSpec(openapi.paths,responseSchema,errorSchema);\nObject.assign(openapi.components.securitySchemes,{developerBearer:{type:'http',scheme:'bearer'}});\n");
+replace('packages/postgres/src/runtime-bootstrap.ts', '  const apiRole=identifier(input.application.user);', "  const apiRole=identifier(input.application.user);\n  await client.query('GRANT SELECT,INSERT ON developer_apps,developer_credentials,developer_events TO '+apiRole);\n  await client.query('GRANT UPDATE(name,scopes,enabled,version,updated_at) ON developer_apps TO '+apiRole);\n  await client.query('GRANT UPDATE(revoked_at) ON developer_credentials TO '+apiRole);\n  await client.query('GRANT EXECUTE ON FUNCTION dg_native_developer_read(text,text,text,text,text,integer) TO '+apiRole);");
+for (const file of ['packages/postgres/src/runtime-database.ts', 'tests/unit/postgres-runtime.test.ts']) {
+  replace(file, "'138-native-directory-shared-identity-name.sql']", "'138-native-directory-shared-identity-name.sql','139-native-developer-access.sql']");
+  if (file.includes('runtime-database')) replace(file, 'manifest.version!==135', 'manifest.version!==136');
+}
+const file = 'migrations/postgres/runtime.json', manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+assert.equal(manifest.version, 135); assert.equal(manifest.migrations.at(-1).name, '138-native-directory-shared-identity-name.sql'); manifest.version = 136;
+manifest.migrations.push({ name: '139-native-developer-access.sql', sha256: createHash('sha256').update(fs.readFileSync('migrations/postgres/139-native-developer-access.sql')).digest('hex') }); fs.writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
+console.log(JSON.stringify({ result: 'DEVELOPER_ACCESS_WIRED_NOT_TESTED', nativeRuntime: 136, sqliteMigration: '060', nextNative: '140', nextSqlite: '061' }));

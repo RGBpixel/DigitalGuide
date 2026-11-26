@@ -1,0 +1,11 @@
+import {z} from 'zod';
+import type pg from 'pg';
+import {RecoveryError} from '../../recovery/src/guard.js';
+import {journalInteger,journalSHA} from './recovery-journal-format.js';
+import {recoveryAuthorityAlgorithm} from './recovery-authority-selection.js';
+import {recoveryOperationTable} from './recovery-operation-objects.js';
+
+export const authorityApplicationSchema=z.object({version:z.literal(1),algorithm:z.literal(recoveryAuthorityAlgorithm),planId:z.uuid(),backupId:z.uuid(),runtimeId:z.uuid(),streamId:z.uuid(),generation:journalInteger.min(1),headSHA256:journalSHA,previewSHA256:journalSHA,beforeDatabaseSHA256:journalSHA,afterDatabaseSHA256:journalSHA,membershipsRestricted:journalInteger,assetsArchived:journalInteger,consentsRevoked:journalInteger,loginsInvalidated:journalInteger,selectionSHA256:journalSHA,rulesSHA256:journalSHA,unsupported:z.array(z.object({table:z.string(),events:journalInteger}).strict()).max(2048),remainingPlanEvents:journalInteger,createdAt:z.iso.datetime()}).strict();
+export type AuthorityApplication=z.infer<typeof authorityApplicationSchema>;
+export async function readAuthorityApplication(client:pg.Client,backupId:string,planId:string){const row=(await client.query('SELECT * FROM '+recoveryOperationTable('authority')+' WHERE backup_id=$1 AND plan_id=$2',[backupId,planId])).rows[0];if(!row)return undefined;const p=authorityApplicationSchema.safeParse(row.result);if(!p.success||!z.uuid().safeParse(row.id).success||row.backup_id!==p.data.backupId||row.plan_id!==p.data.planId||row.head_sha256!==p.data.headSHA256||row.preview_sha256!==p.data.previewSHA256||row.created_at!==p.data.createdAt)throw new RecoveryError('PG_RECOVERY_AUTHORITY_RECEIPT_INVALID','撤权收据的列与审计内容不符。');return{id:row.id as string,application:p.data};}
+export async function insertAuthorityApplication(client:pg.Client,id:string,result:AuthorityApplication){authorityApplicationSchema.parse(result);await client.query('INSERT INTO '+recoveryOperationTable('authority')+'(id,backup_id,plan_id,head_sha256,preview_sha256,result,created_at) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)',[id,result.backupId,result.planId,result.headSHA256,result.previewSHA256,JSON.stringify(result),result.createdAt]);}

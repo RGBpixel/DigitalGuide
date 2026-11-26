@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {DatabaseSync,backup} from 'node:sqlite';
+const folder='docs/evidence/T25/presentation-composition/runtime',directory=path.resolve('storage/backups/presentation-composition-before-'+Date.now()),file=path.join(directory,'digitalguide.sqlite');
+fs.mkdirSync(folder,{recursive:true});assert.ok(!fs.existsSync(folder+'/upgrade-backup.json'));fs.mkdirSync(directory,{recursive:true});const db=new DatabaseSync('storage/digitalguide.sqlite',{readOnly:true});
+try{
+ const migration=db.prepare('SELECT name FROM schema_migrations ORDER BY name DESC LIMIT 1').get() as {name:string};assert.equal(migration.name,'051-live-guest-programme.sql');await backup(db,file);
+ const keys=[];for(const name of ['.session-secret','.provenance-secret']){const source=path.resolve('storage',name),destination=path.join(directory,name);fs.copyFileSync(source,destination,fs.constants.COPYFILE_EXCL);assert.ok(fs.readFileSync(source).equals(fs.readFileSync(destination)));keys.push({name,privateBackupPath:destination,exactBytesPreserved:true});}
+ fs.writeFileSync(folder+'/upgrade-backup.json',JSON.stringify({file,sha256:createHash('sha256').update(fs.readFileSync(file)).digest('hex'),migrationBefore:migration,newMigrationRequired:false,nextMigration:'052',keys,createdAt:new Date().toISOString(),containsPrivateData:true,doNotPublishDatabaseOrKeys:true},null,2)+'\n',{flag:'wx'});
+ console.log(JSON.stringify({result:'PRIVATE_DATABASE_AND_KEYS_BACKUP_SAVED',migrationBefore:migration.name,keyFilesCopied:2}));
+}finally{db.close();}

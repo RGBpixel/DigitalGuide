@@ -1,0 +1,79 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const root='docs/evidence/T20/postgres-live-return',read=f=>JSON.parse(fs.readFileSync(f,'utf8').replace(/^\uFEFF/,''));
+const backend=read(root+'/backend-summary.json'),compiled=read(root+'/compiled-summary.json'),visual=read(root+'/visual-review.json');
+for(const r of [backend,compiled,visual])assert.equal(r.result,'PASS');
+const fps=compiled.returnObservation.rates.encodedFps.toFixed(2),contrast=visual.actualRenderedTextContrast.toFixed(2),r=compiled.actualRecording;
+const summary=`2026-11-24 节目返送媒体与文字对比度完成本地增量。Windows默认64KiB UDP接收缓冲丢失分片，复杂画面收到字节却零解码；调整为4MiB后独立诊断零序号缺口。原生空队列退让、事务内锁复用和节目帧共享素材锁保留真实授权与撤回检查。最终三位合成来宾的独立节目连接及实际视频元素在12秒观察内每秒推进，实测${fps}fps，24fps目标未验收。实际返送帧含三种来宾画面，正文承托对比${contrast}:1；390px来宾页可见节目画面。178个不同检查/14文件分次通过，10项新增专项。新邀请的整秒时间输入规范化为同一UTC时刻，不延长期限，实际到期与永久关闭已验。原录制一次完成${r.publishedFrames}帧，SHA ${r.sha256}。先前失败、独立诊断及不同编译/实例保留，未重置旧次数、期限或租约。PG001—052/runtime49/下一053与SQLite052/下一053冻结；主33223不重启不切库，原数据、两密钥、AE及四进程保持。134/38/65/26、27项本地verified与全部门槛状态保持，T20/G2和完整平台继续。`;
+const next='下一步继续优化24fps目标、持续音频、复杂网络与长期负载，并推进原生形象动作/质检/训练、日历、聊天式编辑、批量团队、发布投放和完整展厅/前台/餐厅等流程。真人形象、声音及语气克隆、声纹焦点、真实渠道/设备及订单支付等分别接入验收；有限本地合成观察不代表现场或生产验收。';
+let file='PLAN.md',text=fs.readFileSync(file,'utf8');
+text=text.replace('当前增量：93，T20节目返送媒体与文字对比度，in_progress；完整平台/G2继续，目标active。','当前增量：93，T20节目返送媒体与文字对比度已完成本地增量验证；完整平台/G2继续，目标active。');
+const a=text.indexOf('## 正在执行：节目返送媒体与文字对比度'),b=text.indexOf('## 上一批交付：原生来宾节目合流与独立录制授权',a);assert.ok(a>=0&&b>a);
+text=text.slice(0,a)+'## 当前交付：节目返送媒体与文字对比度\n\n[实现、检查、启动与边界](docs/93-postgres-live-return.md)、[证据](docs/evidence/T20/postgres-live-return)。'+summary+'\n\n'+next+'\n\n'+text.slice(b);fs.writeFileSync(file,text);
+file='README.md';text=fs.readFileSync(file,'utf8');assert.ok(!text.includes('docs/93-postgres-live-return.md'));
+text=text.replace(/^# DigitalGuide 数字人平台\r?\n/,()=>`# DigitalGuide 数字人平台\n\n[节目返送媒体与文字对比度](docs/93-postgres-live-return.md)：三位合成来宾的独立节目画面已连续显示，实测${fps}fps，文字承托和期限处理已改进；178项检查分次通过。24fps、持续音频及现场质量继续验收，原工作台保持。\n\n上一批交付：\n`);fs.writeFileSync(file,text);
+file='docs/backlog.json';const backlog=read(file),before=read(root+'/backlog-before.json'),evidence=['docs/93-postgres-live-return.md',root+'/backend-summary.json',root+'/compiled-summary.json',root+'/visual-review.json',root+'/runtime/preservation-final.json'];
+function note(item,value){assert.ok(item);item.progressNote=value+(item.progressNote?'\n历史记录：'+item.progressNote:'');item.evidence=[...new Set([...(item.evidence??[]),...evidence])];}
+for(const id of ['R-058','R-094','R-097'])note(backlog.requirements.find(r=>r.id===id),summary+' '+next);
+for(const id of ['T20','T28'])note(backlog.tasks.find(t=>t.id===id),summary+' '+next);
+note(backlog.requirements.find(r=>r.id==='R-015'),`2026-11-24 增量93给直播卡片正文增加动态深色承托，明/暗背景画布回归及实际返送帧核对通过；固定场景对比${contrast}:1。原文本、换行和输出尺寸保持；此证据不代表任意素材或全部视觉流程验收。`);
+for(const field of ['gates','verificationItems'])assert.deepEqual(backlog[field],before[field]);
+assert.deepEqual(backlog.tasks.map(t=>[t.id,t.status]),before.tasks.map(t=>[t.id,t.status]));
+assert.deepEqual(backlog.requirements.map(r=>[r.id,r.status,r.localStatus,r.liveStatus]),before.requirements.map(r=>[r.id,r.status,r.localStatus,r.liveStatus]));
+fs.writeFileSync(file,JSON.stringify(backlog,null,2)+'\n');
+file='docs/06-decisions-and-dependencies.md';text=fs.readFileSync(file,'utf8');text+='\n## 2026-11-24：节目返送热路径与帧锁\n\nR-015、R-058、R-094、R-097采用4MiB本地视频RTP接收缓冲，避免Windows默认64KiB接收队列在复杂关键帧突发时丢分片。空任务队列短暂退让；只在同一仍有效的事务中复用已实际获取的数据库锁，保存点控制会清空复用记录。节目帧继续持有直播租户独占锁，并持有素材工作空间共享锁，允许观察读取、排除素材写入和普通场控写入。角色、工作空间、租约、媒体代次、独立用途及来源撤回仍逐次验证；不跨事务或请求缓存授权。新邀请的合法ISO期限在签名和入库前规范化为等值UTC毫秒格式，避免文本比较对整秒时间产生偏差；不延长期限，不自动改写历史邀请，未新增SQL或权限。参见[增量93](93-postgres-live-return.md)。\n';fs.writeFileSync(file,text);
+const doc=`# 节目返送媒体与文字对比度
+
+状态：2026-11-24 已完成本地增量实现与验证；T20、G2和完整134项需求继续。
+
+${summary}
+
+## 实现与证据
+
+上一轮移动端节目返送仍在缓冲。本轮分别检查独立节目RTC连接、接收字节、实际解码、视频元素来源和播放推进，避免以后台连接的画面或汇总计数代替节目返送。
+
+复杂画面的独立诊断在Windows默认65536字节UDP缓冲下出现3466个序号缺口，视频收到字节却零解码；4194304字节缓冲下零缺口、解码22帧。简单蓝底和低帧率诊断也保留。诊断用于定位根因，较早脚本变体不计作最终应用验收。生产改动保留原回环地址、SSRC、包边界与租约约束。
+
+原生worker空队列退让500ms，失败退让1000ms，活跃任务仍按原并发运行。锁复用仅在同一外层事务中有效，提交、回滚及保存点控制不会保留旧获取记录。节目帧持有直播租户独占锁和素材工作空间共享锁：允许观察读取，同时阻挡素材修改及普通场控写入。授权、实际来源和撤回检查继续执行。真实PG并发测试检查共享/独占、升级、回滚、保存点、帧观察与权限边界。
+
+发现整秒ISO期限与毫秒ISO期限的字符串排序差异后，新邀请输入在签名及入库前统一为同一UTC时刻，浏览器访问按实际时间判断。专项验证同一原期限到期后拒绝访问、清理邀请并永久撤回设备；未延长期限，未自动改写历史邀请。没有修改已应用SQL或增加数据库权限。
+
+直播卡片正文按实际行数绘制深色承托。固定文本、换行、两种背景样本和输出尺寸通过回归；实际节目流帧对比${contrast}:1，人工核对三种来宾画面与正文。390px页面已可看到返回节目。
+
+## 实际运行的检查
+
+- 类型检查、ESLint和应用构建通过。
+- 专项52项与关联126项分次通过，共178个不同检查、14个文件；新增10项为3个空队列行为、6个真实PG锁边界和1个正文可读性检查。
+- 最终编译应用使用独立TLS PostgreSQL、两份API、worker与浏览器，三位明确授权的合成来宾参与节目。独立节目连接与实际视频元素匹配，12秒窗口每次约1秒采样均有新帧，实测${fps}fps。24fps目标未验收。
+- 最终录制 ${r.recordingId} 一次完成${r.publishedFrames}帧，SHA256 ${r.sha256}。原失败报告及不同编译/实例均保留。
+- 数据、原进程、两密钥、AE配置、模型和PG程序的独立保全检查见最终清单；文档追溯与接口导出另有命令报告。
+
+证据：[检查汇总](evidence/T20/postgres-live-return/backend-summary.json)、[应用观察](evidence/T20/postgres-live-return/compiled-summary.json)、[实际画面核对](evidence/T20/postgres-live-return/visual-review.json)。最终冻结清单位于 evidence/T20/postgres-live-return/verification.json。
+
+## 启动与复验
+
+原工作台仍在 http://127.0.0.1:5174，API4301；本轮未重启、未切库。当前新原生能力在独立私有验证实例与独立端口运行。
+
+先构建，再以未使用的标签运行，避免覆盖报告：
+
+~~~powershell
+node scripts/build.mjs
+node scripts/native-live-return-checks.mjs my-target target
+node scripts/native-live-return-checks.mjs my-related related
+node scripts/native-live-return-checks.mjs my-return proof current 3
+~~~
+
+浏览器复验建立独立TLS数据库和角色，启动编译应用；使用合成canvas/oscillator，结束时关闭所拥有的进程和端口。失败报告保留。手动实例启动方法见[原生核心](62-postgres-native-core.md)：API、worker分别使用私有api.json、worker.json，DATABASE_DRIVER=postgres、POSTGRES_CORE_VALIDATION_ONLY=1、APP_ENV=development、PROVIDER_MODE=mock及未占用的回环端口。密钥和私有配置不进入源码、前端或证据。
+
+## 模拟、真实与剩余条件
+
+本轮未请求物理摄像头或麦克风权限；物理扬声器播放未验收。合成画面和纯音确实经过本地浏览器RTC、服务端解码及编码，不能作为真人形象、声音/语气克隆、声纹焦点或现场识别的证据。12秒观察不代表持续音频、复杂网络或长期负载；固定画面和明暗背景样本不代表任意素材可读性。
+
+真实人物及授权素材、目标设备、渠道账号、订单支付等业务系统仍需分别接入验证。没有真实直播推流、社交发布、通知、广告花费、支付、门禁或公网部署。所有竞品能力并集及134项需求保留，27项本地verified和G1/G2门槛状态不因本轮变更。
+
+${next}
+`;
+fs.writeFileSync('docs/93-postgres-live-return.md',doc);
+file='scripts/build-docs.mjs';text=fs.readFileSync(file,'utf8');assert.ok(!text.includes('docs/93-postgres-live-return.md'));
+text=text.replace("'docs/92-postgres-live-programme.md',",()=>"'docs/92-postgres-live-programme.md', 'docs/93-postgres-live-return.md',");fs.writeFileSync(file,text);
+console.log(JSON.stringify({result:'PASS',updated:['README.md','PLAN.md','docs/backlog.json','docs/06-decisions-and-dependencies.md','docs/93-postgres-live-return.md'],taskStatusesAndGatesKept:true}));

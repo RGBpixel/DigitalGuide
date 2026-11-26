@@ -1,0 +1,58 @@
+import { test, expect } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+
+test('发布知识并配置独立场景，访客获得带来源回答，撤回后旧内容消失', async ({ page, context, browser }) => {
+  const browserErrors: string[] = []; page.on('pageerror', e => browserErrors.push(e.message)); page.on('console', e => { if (e.type() === 'error' && !e.text().startsWith('Failed to load resource:')) browserErrors.push(e.text()); });
+  page.on('response', r => { if (r.status() === 400 || r.status() >= 500) browserErrors.push(r.status() + ' ' + r.url()); });
+  const evidence = process.env.EVIDENCE_DIR || 'docs/evidence/latest'; mkdirSync(evidence, { recursive: true });
+  const suffix = Date.now(), roleName = '知识演示角色' + suffix, collectionName = '公开接待指南' + suffix, appName = '前台知识服务' + suffix;
+  await page.goto('/'); await page.getByRole('button', { name: /林知 · 管理员/ }).click();
+  await page.goto('/assets?tab=profiles'); await page.getByRole('button', { name: '新建角色', exact: true }).first().click();
+  const dialog = page.getByRole('dialog'); await dialog.getByLabel('角色名称', { exact: true }).fill(roleName);
+  await dialog.getByRole('combobox', { name: '形象参考', exact: true }).selectOption({ label: '小屿 · 合成形象参考' });
+  await dialog.getByRole('button', { name: '保存角色配置', exact: true }).click(); await expect(dialog).not.toBeVisible();
+  await page.goto('/knowledge'); await page.getByRole('button', { name: '新建知识库', exact: true }).click();
+  await page.getByLabel('知识库名称', { exact: true }).fill(collectionName); await page.getByRole('button', { name: '保存知识库范围', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: '当前知识库', exact: true })).toContainText(collectionName);
+  await page.getByRole('button', { name: '新增资料草稿', exact: true }).click();
+  await page.getByLabel('导入文本文件', { exact: true }).setInputFiles({ name: '展厅开放时间.txt', mimeType: 'text/plain', buffer: Buffer.from('展厅开放时间为周二至周日 09:00 至 17:00，周一闭馆。') });
+  await expect(page.getByRole('textbox', { name: '正文', exact: true })).toHaveValue(/周一闭馆/);
+  await page.getByLabel('来源名称', { exact: true }).fill('演示服务手册'); await page.getByLabel('来源链接（可选）', { exact: true }).fill('https://example.com/guide');
+  await page.getByRole('button', { name: '保存待审草稿', exact: true }).click();
+  await page.getByRole('checkbox', { name: /我已核对正文、来源/ }).check(); await page.getByRole('button', { name: '发布选中版本', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: '查看知识版本', exact: true })).toContainText('已发布');
+  await page.getByLabel('检索问题', { exact: true }).fill('展厅开放时间'); await page.getByRole('button', { name: '检索已发布资料', exact: true }).click();
+  await expect(page.locator('.knowledge-snippet')).toContainText('周一闭馆');
+  await page.screenshot({ path: evidence + '/knowledge-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.locator('.sidebar').evaluate(e => e.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: evidence + '/knowledge-mobile.png', fullPage: true }); await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.getByRole('button', { name: '场景应用配置', exact: true }).click();
+  await page.getByLabel('应用名称', { exact: true }).fill(appName); await page.getByLabel('独立频道标识', { exact: true }).fill('lobby-' + suffix);
+  await page.getByRole('combobox', { name: '统一角色', exact: true }).selectOption({ label: roleName + ' · v1' });
+  await page.getByRole('checkbox', { name: collectionName + ' · 公开', exact: true }).check();
+  await page.getByRole('button', { name: '保存场景配置', exact: true }).click(); await expect(page.getByRole('heading', { name: '编辑场景应用 · v1', exact: true })).toBeVisible();
+  await page.getByLabel('场景试问', { exact: true }).fill('展厅开放时间'); await page.getByRole('button', { name: '预览模拟回答', exact: true }).click();
+  await expect(page.locator('.knowledge-preview')).toContainText('周一闭馆'); await page.evaluate(() => window.scrollTo(0, 0)); await page.screenshot({ path: evidence + '/scene-app-desktop.png', fullPage: true });
+  await page.goto('/reception'); await expect(page.getByText('正在加载终端…', { exact: true })).not.toBeVisible();
+  if (!await page.getByRole('button', { name: '保存终端配置', exact: true }).isVisible()) await page.getByText('新增终端', { exact: true }).click();
+  await page.getByRole('button', { name: '保存终端配置', exact: true }).click();
+  await page.getByRole('combobox', { name: '本次场景应用', exact: true }).selectOption({ label: appName + ' · v1' });
+  await page.getByRole('button', { name: '开始文字接待', exact: true }).click(); await expect(page.getByRole('heading', { name: '您好，欢迎来访', exact: true })).toBeVisible();
+  const guestContext = await browser.newContext();
+  try {
+    await guestContext.addCookies((await context.cookies()).filter(c => c.name === 'dg_guest')); const guest = await guestContext.newPage(); await guest.goto(page.url());
+    await guest.getByLabel('输入您的问题', { exact: true }).fill('展厅开放时间'); await guest.getByRole('button', { name: '发送文字', exact: true }).click();
+    const conversation = guest.getByLabel('本次会话消息', { exact: true }); await expect(conversation).toContainText('周一闭馆'); await expect(conversation.getByLabel('知识来源')).toContainText('第 1 版');
+    expect((await guest.request.get('/api/v1/me')).status()).toBe(401); await guest.screenshot({ path: evidence + '/guest-knowledge-citations.png', fullPage: true });
+    await page.goto('/knowledge'); await page.getByRole('combobox', { name: '当前知识库', exact: true }).selectOption({ label: collectionName + ' · 公开' });
+    await page.getByRole('button', { name: /展厅开放时间 有已发布版本/ }).click();
+    await page.getByRole('checkbox', { name: /我已核对正文、来源/ }).check(); await page.getByRole('button', { name: '撤回当前发布版', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: '查看知识版本', exact: true })).toContainText('已撤回');
+    await expect(conversation).not.toContainText('周一闭馆'); await expect(conversation.getByLabel('知识来源')).toHaveCount(0);
+    await guest.getByLabel('输入您的问题', { exact: true }).fill('展厅开放时间'); await guest.getByRole('button', { name: '发送文字', exact: true }).click(); await expect(conversation).toContainText('未找到当前受众和场景');
+    await guest.getByRole('button', { name: '结束本次接待', exact: true }).click();
+  } finally { await guestContext.close(); }
+  expect(browserErrors).toEqual([]);
+});

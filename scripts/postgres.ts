@@ -1,0 +1,12 @@
+import {importPostgresArchive,verifyPostgresArchive,loadConnectionConfig,PostgresMigrationError} from '../packages/postgres/src/index.js';
+const help='DigitalGuide 离线SQLite→PostgreSQL隔离迁移\nimport|verify --archive <加密备份> --key-file <备份密钥文件> --connection-file <私有连接JSON> --schema dg_import_<32位十六进制> --work-dir <已有私有目录> [--root <代码根>]\nimport另需 --confirm-staging；不接收密码或连接串，不覆盖既有schema，不启用API/worker/正式业务。';
+const controller=new AbortController();process.on('SIGINT',()=>controller.abort());process.on('SIGTERM',()=>controller.abort());
+try{
+  const args=process.argv.slice(2),command=args.shift();if(!command||command==='help'||command==='--help')console.log(help);else{
+    if(!['import','verify'].includes(command))throw new PostgresMigrationError('PG_ARGUMENT_INVALID','未知命令，请运行 pnpm postgres --help。');const values=new Map<string,string>(),allowed=['archive','key-file','connection-file','schema','work-dir','root',...(command==='import'?['confirm-staging']:[])];
+    while(args.length){const flag=args.shift()!;if(!flag.startsWith('--')||!allowed.includes(flag.slice(2))||values.has(flag.slice(2)))throw new PostgresMigrationError('PG_ARGUMENT_INVALID','参数未知或重复。凭据只能从私有文件读取。');const name=flag.slice(2);if(name==='confirm-staging')values.set(name,'1');else{const value=args.shift();if(!value||value.startsWith('--'))throw new PostgresMigrationError('PG_ARGUMENT_INVALID','命令参数缺少值。');values.set(name,value);}}
+    const required=(name:string)=>{const value=values.get(name);if(!value)throw new PostgresMigrationError('PG_ARGUMENT_INVALID','缺少 --'+name+'。');return value;};if(command==='import'&&!values.has('confirm-staging'))throw new PostgresMigrationError('PG_STAGING_CONFIRM_REQUIRED','离线导入需显式 --confirm-staging，目标始终隔离，不含正式激活授权。');
+    const input={archive:required('archive'),keyFile:required('key-file'),connection:loadConnectionConfig(required('connection-file')),schema:required('schema'),workDir:required('work-dir'),root:values.get('root'),signal:controller.signal,onPhase:(phase:string)=>console.log(JSON.stringify({event:'phase',phase}))};
+    const result=await(command==='import'?importPostgresArchive(input):verifyPostgresArchive(input));console.log(JSON.stringify({event:'complete',command,...result}));
+  }
+}catch(e){console.error(JSON.stringify({event:'error',error:e instanceof PostgresMigrationError?{code:e.code,message:e.message}:{code:'PG_IO_FAILED',message:'离线迁移操作失败。请检查私有配置、空间、归档或权限；不打印原始数据、SQL和凭据。'}}));process.exitCode=1;}

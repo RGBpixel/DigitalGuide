@@ -1,0 +1,5 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const file='apps/web/src/operations/EnterpriseDirectoryPage.tsx';let source=fs.readFileSync(file,'utf8');const old="{connector,member}=directoryReviewTarget(view,selection),binding=";assert.ok(source.includes(old));source=source.replace(old,"{connector,member}=directoryReviewTarget(view,selection),proposed=member?.proposedAccess===undefined?(connector?.memberRole?{role:connector.memberRole,workspaceIds:connector.workspaceIds}:null):member.proposedAccess,binding=");
+const before="<p>复核后角色：{connector?.memberRole?roles[connector.memberRole]:'尚未配置'}</p><Spaces ids={connector?.workspaceIds??[]} workspaces={view.workspaces}/>";assert.ok(source.includes(before));source=source.replace(before,"<p>复核后角色：{proposed?.role?roles[proposed.role]:'尚未就绪'}</p><Spaces ids={proposed?.workspaceIds??[]} workspaces={view.workspaces}/>");fs.writeFileSync(file,source);
+fs.appendFileSync('packages/contracts/src/index.ts',"import {registerDirectoryAccessSpec} from './directory-access-openapi.js';\nregisterDirectoryAccessSpec(openapi.paths,responseSchema,errorSchema);\n");

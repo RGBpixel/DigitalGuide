@@ -1,0 +1,3 @@
+import fs from 'node:fs';
+let s=fs.readFileSync('scripts/operations-metrics-web-input.mjs','utf8');s=s.replace('operations-compiled-continued/proof.json',()=> 'operations-compiled-tail/proof.json').replaceAll('compiled-only-root-operations-ui-v2','compiled-only-root-operations-ui-v3').replaceAll('web-v2-resume-input.json','web-v3-resume-input.json');fs.writeFileSync('scripts/operations-metrics-web-v3-input.mjs',s,{flag:'wx'});
+const f='docs/evidence/T35/operations-metrics/check-runner.mjs';s=fs.readFileSync(f,'utf8');s=s.replace('const commands={',()=>"const commands={'operations-final-proof':['--import','tsx','scripts/operations-metrics-proof-final.ts'],");fs.writeFileSync(f,s);

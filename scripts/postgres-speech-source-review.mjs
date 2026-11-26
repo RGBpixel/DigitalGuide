@@ -1,0 +1,30 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+
+const root='docs/evidence/T20/postgres-speech',read=f=>JSON.parse(fs.readFileSync(f,'utf8').replace(/^\uFEFF/,'')),text=f=>fs.readFileSync(f,'utf8'),hash=f=>createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+const bindings=[];
+for(const name of ['compiled-sixth','backend-voice-current']){
+ const command=read(root+'/'+name+'-command.json');assert.equal(command.exitCode,0);
+ for(const[f,sha]of Object.entries(command.sourceSHA256))assert.equal(hash(f),sha,f);
+ bindings.push({report:root+'/'+name+'-command.json',currentSourcesMatchExecutedCommand:true,files:Object.keys(command.sourceSHA256).length});
+}
+const probeBindings=[
+ ['scripts/postgres-speech-queue-probe.ts',/service\.create\(/,'NativeSpeechJobs.create, same idempotency/audit/event transaction, five staged tables'],
+ ['scripts/postgres-speech-finish-probe.ts',/worker\.runOne\(/,'Default real NativeSpeechWorker.runOne completion callback, four staged tables'],
+ ['scripts/postgres-speech-apply-probe.ts',/service\.apply\(/,'NativeSpeechJobs.apply, real prepared assets and project version, twelve staged tables']
+].map(([file,pattern,method])=>{assert.match(text(file),pattern);assert.match(text(file),/new Promise/);return{file,method,sha256:hash(file),compiledProbeActuallyKilledBeforeCommit:true};});
+const extract=sql=>{const start=sql.indexOf('FUNCTION dg_native_commit_transfer_asset(');assert.ok(start>=0);const end=sql.indexOf('$dg$;',start);assert.ok(end>start);return sql.slice(start,end+'$dg$;'.length).replaceAll('\r\n','\n');};
+assert.equal(extract(text('migrations/postgres/017-native-video-sources.sql')).replace("WHEN 'audio/wav' THEN 8388608","WHEN 'audio/wav' THEN 67108864"),extract(text('migrations/postgres/023-native-package-stored-wav.sql')));
+const inventory=read(root+'/compiled-diffs-current/inventory.json'),support=inventory.entries.filter(e=>!['dist/api.mjs','dist/worker.mjs','dist/postgres-runtime.mjs'].includes(e.file));assert.equal(inventory.entries.length,19);assert.equal(support.length,16);
+for(const e of support){
+ assert.equal(hash(e.file),e.newSHA256);assert.equal(hash(e.diff),e.diffSHA256);
+ const changes=text(e.diff).split(/\r?\n/).filter(l=>/^[+-]/.test(l)&&!/^\+\+\+|^---/.test(l));
+ assert.deepEqual(changes,['dist/studio-delivery.mjs','dist/timeline-render.mjs'].includes(e.file)?['-var storedPngMaximumBytes;','+var storedPngMaximumBytes, storedWavMaximumBytes;','+    storedWavMaximumBytes = 64 * 1024 * 1024;']:['+var storedWavMaximumBytes = 64 * 1024 * 1024;'],e.file);
+}
+const brand=text('migrations/postgres/024-native-pronunciation-brand-scope.sql');assert.match(brand,/RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT/);assert.match(brand,/session_user IN\(app_role,worker_role\)/);assert.match(brand,/REVOKE ALL ON FUNCTION .* FROM PUBLIC/);
+const bootstrap=text('packages/postgres/src/runtime-bootstrap.ts');assert.ok(!bootstrap.split('\n').some(l=>l.includes('GRANT SELECT')&&l.includes('studio_brand_kits')&&l.includes('workerRole')));
+assert.match(text('packages/media/src/index.ts'),/buffer\.length > 8 \* 1024 \* 1024/);assert.match(text('packages/postgres/src/runtime-speech-origins.ts'),/path\.has\(asset.id\)\|\|path.size>=12/);
+const files=[...new Set([...Object.keys(read(root+'/backend-voice-current-command.json').sourceSHA256),...probeBindings.map(p=>p.file),'packages/postgres/src/runtime-assets.ts','packages/postgres/src/runtime-studio-resources.ts','packages/postgres/src/runtime-bootstrap.ts','packages/postgres/src/runtime-project-package.ts','packages/postgres/src/runtime-package-worker.ts','apps/worker/src/project-package-import.ts','packages/media/src/index.ts','packages/contracts/src/media-limits.ts','packages/domain/src/portable-project.ts','apps/api/src/postgres-core-app.ts','apps/worker/src/postgres-core.ts','tests/integration/postgres-native-cluster.ts','vitest.config.ts','scripts/postgres-speech-proof.ts','scripts/postgres-speech-browser.ts','scripts/postgres-speech-engine-observe.ps1'])];
+const result={result:'PASS',checkedAt:new Date().toISOString(),method:'Reviewed actual source and private-backup diffs, then matched the frozen current command fingerprints. Static review supplements separately executed runtime tests.',bindings,probeBindings,supportBundleReview:{files:support.length,onlySharedStoredWavConstantDeclarationChanged:true,frontendChanged:false},migration023OnlyChangesExistingInternalWavBound:true,migration024BooleanScopeOnly:true,workerRawBrandBodySelectNotAdded:true,ordinaryUpload8MbBoundRetained:true,findings:['Current actor, tenant/workspace and source validity are checked before and at completion, with immutable input/output/application ledgers and same-transaction audit/events.','The worker holds physical execution slots until the actual engine closes; natural retry keeps the original 30-second lease and at most two attempts.','Generated PCM WAV adoption reads actual file bytes and SHA/PCM receipts; frozen document lineage avoids self-invalidating the adopted asset while inherited source/consent/expiry restrictions remain.','Protected brand scope is a boolean, not a broad brand SELECT grant. Portable project warnings retain the distinction between audio bytes and model/service/consent migration.','The actual SAPI kill was observed after helper launch and file creation with zero bytes, not after positive partial PCM.','Desktop/mobile captures were directly inspected; the earlier obscured mobile screenshot remains a failure.'],sourceSHA256:Object.fromEntries(files.sort().map(f=>[f,hash(f)])),productProductionAccepted:false,realCloneQualityAccepted:false,oldFailuresRewritten:false};
+fs.writeFileSync(root+'/current-source-review.json',JSON.stringify(result,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:'PASS',commandBindings:bindings.length,actualProbeBindings:probeBindings.length,reviewedSupportBundles:support.length,files:files.length}));

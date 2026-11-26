@@ -1,0 +1,4 @@
+import fs from 'node:fs';
+import {PNG} from 'pngjs';
+import {GazeCorrector,type GazeDetection} from '../packages/media/src/gaze-pixels.js';
+const png=PNG.sync.read(fs.readFileSync('packages/test-fixtures/assets/gaze-portrait.png')),probe=JSON.parse(fs.readFileSync('docs/evidence/T24/gaze/landmark-current/proof.json','utf8')),detection:GazeDetection={landmarks:probe.landmarks,matrices:probe.matrices.map((m:{data:number[]})=>m.data)},result=new GazeCorrector(png.width,png.height,{targetX:.5,targetY:.5,maximumShift:.1,smoothingMs:150},.8).frame(png.data,detection,0,0),alphas:Record<string,number>={};for(const eye of result.trace.eyes)for(let y=Math.floor(eye.y*png.height);y<Math.ceil((eye.y+eye.height)*png.height);y++)for(let x=Math.floor(eye.x*png.width);x<Math.ceil((eye.x+eye.width)*png.width);x++){const alpha=png.data[(y*png.width+x)*4+3];alphas[alpha]=(alphas[alpha]||0)+1;}console.log(JSON.stringify({width:png.width,height:png.height,trace:result.trace,alphas}));

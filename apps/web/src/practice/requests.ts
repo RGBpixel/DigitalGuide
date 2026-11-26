@@ -1,0 +1,2 @@
+import {api,ApiError} from '../api.js';
+export function practiceRequests(){const pending=new Map<string,string>();return async<T>(url:string,body:object):Promise<T>=>{const slot=JSON.stringify([url,body]);if(!pending.has(slot)&&pending.size>=100)throw new Error('有较多尚未核对的请求，请先刷新当前记录核对结果。');const key=pending.get(slot)||crypto.randomUUID();pending.set(slot,key);try{const result=await api<T>(url,body,'POST',undefined,undefined,key);pending.delete(slot);return result;}catch(e){if(e instanceof ApiError&&e.status>=400&&e.status<500)pending.delete(slot);throw e;}};}

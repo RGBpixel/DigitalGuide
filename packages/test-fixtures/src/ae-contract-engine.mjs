@@ -1,0 +1,15 @@
+// ORIGINAL CONTRACT FIXTURE ONLY. This is not Adobe software and does not read AEP binaries.
+import fs from 'node:fs';
+import process from 'node:process';
+import {setInterval} from 'node:timers';
+import {createHash} from 'node:crypto';
+import path from 'node:path';
+import {spawn} from 'node:child_process';
+import {PNG} from 'pngjs';
+import {fileURLToPath} from 'node:url';
+const args=process.argv.slice(2),value=name=>args[args.indexOf(name)+1],project=value('-project'),output=value('-output'),comp=value('-comp');if(!project||!output||!comp)process.exit(8);
+const owned=path.dirname(output);if(comp==='FAIL')process.exit(9);if(comp==='NO_OUTPUT')process.exit(0);
+if(comp==='WAIT'){const nested=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{windowsHide:true,stdio:'ignore'});fs.writeFileSync(path.join(owned,'contract-processes.json'),JSON.stringify({engine:process.pid,nested:nested.pid}));setInterval(()=>{},1000);await new Promise(()=>{});}
+const data=JSON.parse(fs.readFileSync(path.join(path.dirname(project),'data','parameters.json'),'utf8')).parameters,meta=JSON.parse(fs.readFileSync(path.join(path.dirname(project),'meta.json'),'utf8')),width=comp==='BAD_SPEC'?128:meta.width,height=comp==='BAD_SPEC'?128:meta.height,png=new PNG({width,height}),hex=String(data.color||'#22dd66').slice(1),rgb=[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)),left=Math.round(Number(data.position||0)*width),alpha=Math.round(Number(data.opacity??1)*255);
+for(let y=0;y<height;y++)for(let x=0;x<width;x++){const at=(y*width+x)*4;if(!meta.alpha)png.data.set([16,34,56,255],at);if(x>=left&&x<left+width*.25&&y>=height*.2&&y<height*.55)png.data.set([...rgb,alpha],at);}if(data.cover){const cover=PNG.sync.read(fs.readFileSync(path.join(path.dirname(project),...String(data.cover).split('/'))));for(let y=Math.round(height*.1);y<height*.3;y++)for(let x=Math.round(width*.75);x<width*.95;x++)png.data.set(cover.data.subarray(0,4),(y*width+x)*4);}
+const image=path.join(owned,'contract-image.png');fs.writeFileSync(image,PNG.sync.write(png));const ffmpeg=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../../storage/tools/ffmpeg-9.0.2/ffmpeg.exe'),duration=meta.frameCount*meta.fpsDenominator/meta.fpsNumerator,command=['-v','error','-nostdin','-n','-loop','1','-framerate',String(meta.fpsNumerator/meta.fpsDenominator),'-i',image,'-f','lavfi','-i',data.hideVoice?'anullsrc=r=48000:cl=stereo':'sine=frequency=440:sample_rate=48000','-t',String(duration),'-map','0:v','-map','1:a','-c:v','prores_ks','-profile:v',meta.alpha?'4':'2','-pix_fmt',meta.alpha?'yuva444p10le':'yuv422p10le','-c:a','pcm_s16le','-ac','2','-metadata','comment=CONTRACT_ONLY_PARAMETERS_SHA256:'+createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.keys(data).sort().map(key=>[key,data[key]])))).digest('hex'),output];const child=spawn(ffmpeg,command,{windowsHide:true,stdio:'ignore'});const code=await new Promise(resolve=>{child.once('error',()=>resolve(10));child.once('close',resolve);});process.exit(Number(code)||0);

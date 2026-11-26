@@ -1,0 +1,21 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const root='docs/evidence/T35/developer-webhooks',read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
+assert.equal(read(root+'/webhook-compiled/proof.json').result,'PASS');assert.equal(read(root+'/visual-retained.json').result,'PASS_RETAINED_VISUAL_ASSERTIONS_AND_CURRENT_BUILD_BINDING');
+for(const label of ['webhook-final-types','webhook-final-lint','webhook-final-build','webhook-api-spec','webhook-migration'])assert.equal(read(root+'/'+label+'-command.json').result,'PASS');
+assert.equal(read(root+'/webhook-final-process-audit.json').privateProcesses,0);
+const note='2026-11-26 增量141签名事件回调检查点：当前空间应用的projects.changed/exports.changed订阅、私有接收端/密钥、修订确认与幂等、业务同事务元数据事件、独立派发和不可变尝试回执已接通。5次自动重试/累计20次、20秒租约、4路容量、实际HTTP不确定去重、发送前与发送期间撤回、配置轮换和旧代次取消已验证；不转发人员凭证，不重放历史。44不同自动检查/5文件分阶段：8单元+2接口文档+16SQLite+17原生+1定向迁移，其余44迁移未跑；原15+1/15+2失败及原进度保护、类型/lint错误保留，仅在原失败实例补取消/进度与回滚，不重建原工程/导出。独立主编译6项及8GUI通过，实际派发器SIGKILL后等待原租约到期，接收端按同编号去重；双API/PG重启后527表/2视图、两原密钥/原cookie及9类本轮业务表快照保持。手机样式另2项只读合成复核已执行，后续清单漏计两份.js原FAIL保留，按原源码/栈/截图离线补核，不重开实例；两套101产物、顶层28份相同，主有运行前后清单，补充为关闭后绑定。类型/lint/构建/OpenAPI通过，文档/最终摘要以随附报告为准。严格3根/12端口/70捕获创建身份私有0，不扩大短命CLI覆盖；主33223四原进程、3310业务行/两密钥/052保持，8过期原登录未复活，不重启切库。061/140首次提交冻结、runtime137、下一062/141；原恢复规则不改。只用自有回环接收端，无媒体/通用worker、内容模型或设备/真实外部动作。机器写入/通用任务/完整下载/品牌嵌入、真实HTTPS及生产队列恢复/容量部署和完整134/38/65/26/T20/T35/G2继续；27本地verified、两进行中、9pending及目标active/progress保持。见docs/141-developer-webhooks.md。';
+let plan=fs.readFileSync('PLAN.md','utf8');
+plan=plan.replace('当前增量：141，Webhook订阅、签名与持久投递；核心初稿类型/lint通过，业务/双库/编译/界面未验。计划追加061/140/runtime137，原恢复规则、主工作台和完整平台范围保持。','当前增量：141，签名事件回调、独立持久派发与中文管理已完成本地工程验证；44自动/6主编译/8GUI分阶段，另2只读样式补核；完整平台与真实接入继续。');
+plan=plan.replace('源码SQLite001—060冻结/下一061；独立原生001—139/runtime136冻结/下一140。','源码SQLite001—061冻结/下一062；独立原生001—140/runtime137冻结/下一141。');
+if(!plan.includes(note))plan=plan.replace('\n2026-11-26 增量141核心接线检查点：','\n'+note+'\n\n2026-11-26 增量141核心接线检查点：');
+const backlog=read('docs/backlog.json');assert.equal(backlog.requirements.length,134);assert.equal(backlog.tasks.length,38);assert.equal(backlog.expectedCounts.acceptanceCases,65);assert.equal(backlog.capabilityGroups.length,26);assert.equal(backlog.tasks.filter(task=>task.status==='verified').length,27);
+const evidence=[root+'/verification.json',root+'/final-hash-audit.json','docs/141-developer-webhooks.md',root+'/visual-retained.json',root+'/webhook-retained-native.json'];
+for(const item of [backlog.tasks.find(task=>task.id==='T35'),...backlog.requirements.filter(req=>['R-062','R-120'].includes(req.id))]){item.progressNotes=(item.progressNotes?item.progressNotes+'\n':'')+note;item.evidence=[...new Set([...(item.evidence||[]),...evidence])];}
+fs.writeFileSync('PLAN.md',plan);fs.writeFileSync('docs/backlog.json',JSON.stringify(backlog,null,2)+'\n');
+const readme=fs.readFileSync('README.md','utf8'),entry='[签名事件回调与独立派发](docs/141-developer-webhooks.md)：工程/导出订阅、签名、同事务事件、持久投递和中文管理已接通。44自动/6主编译/8GUI分阶段，另2只读样式补核；原FAIL保留，2套101绑定、28顶层产物相同。527表/两密钥重启保持，061/140/runtime137冻结，主052不重启切库；真实HTTPS、写入/下载/品牌嵌入与G2继续，启动见文档。';
+assert.ok(!readme.includes(entry));fs.writeFileSync('README.md',readme.replace('# DigitalGuide 数字人平台','# DigitalGuide 数字人平台\n\n'+entry));
+for(const file of ['verification.json','final-hash-audit.json'])assert.equal(fs.existsSync(root+'/'+file),false);
+fs.writeFileSync(root+'/verification.json',JSON.stringify({result:'PENDING_FINAL_DOCUMENT_AND_HASH_AUDIT',goalStatus:'active',distinctAutomatedChecks:44,compiledBusinessChecks:6,guiChecks:8,additionalReadonlyVisualChecks:2,phaseStillOpen:true},null,2)+'\n',{flag:'wx'});
+fs.writeFileSync(root+'/final-hash-audit.json',JSON.stringify({result:'PENDING_FINAL_HASH_BINDINGS',goalStatus:'active'},null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({result:'WEBHOOK_DELIVERY_DOCUMENTED_FINAL_BINDING_PENDING',requirements:134,tasks:38,acceptance:65,groups:26,goal:'active'}));

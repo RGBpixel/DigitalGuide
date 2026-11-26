@@ -1,0 +1,6 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const name='127-native-recovery-privacy.sql',file='migrations/postgres/runtime.json',r=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(r.version,123);assert.equal(r.migrations.at(-1).name,'126-native-recovery-journal.sql');assert.equal(fs.existsSync('docs/evidence/T20/postgres-recovery-privacy/127-first-committed.json'),false);r.version=124;r.migrations.push({name,sha256:createHash('sha256').update(fs.readFileSync('migrations/postgres/'+name)).digest('hex')});fs.writeFileSync(file,JSON.stringify(r,null,2)+'\n');
+function change(f,from,to){const source=fs.readFileSync(f,'utf8');assert.equal(source.split(from).length,2,f);fs.writeFileSync(f,source.replace(from,()=>to));}
+change('packages/postgres/src/runtime-database.ts',"'126-native-recovery-journal.sql'];","'126-native-recovery-journal.sql','127-native-recovery-privacy.sql'];");change('packages/postgres/src/runtime-database.ts','manifest.version!==123','manifest.version!==124');change('tests/unit/postgres-runtime.test.ts',"'126-native-recovery-journal.sql']);","'126-native-recovery-journal.sql','127-native-recovery-privacy.sql']);");console.log(JSON.stringify({result:'PASS_RECOVERY_PRIVACY_WIRING',runtime:124,migration:name,nextMigration:'128',sqlite:'052'}));

@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {contentWritingModel} from '../packages/providers/src/content-writing-model.js';
+import {runContentWritingNative} from '../packages/providers/src/content-writing-native.js';
+import {writingRequest} from '../packages/test-fixtures/src/content-writing.js';
+const root=process.cwd(),folder=path.resolve(process.argv[2]||'docs/evidence/T24/content-writing/model-first');fs.mkdirSync(folder,{recursive:true});assert.ok(!fs.existsSync(path.join(folder,'probe.json')));const db=new DatabaseSync('storage/digitalguide.sqlite',{readOnly:true});try{assert.equal((db.prepare('SELECT count(*) n FROM native_model_leases').get() as {n:number}).n,0);}finally{db.close();}const request=writingRequest(),profile=await contentWritingModel(root),startedAt=new Date().toISOString();
+try{const native=await runContentWritingNative({root,directory:path.join(folder,'private-work'),request,engine:profile.writingEngine},new AbortController().signal,()=>{});assert.equal(native.result.variants.length,2);assert.ok(native.result.variants.every(v=>v.sections.map(s=>s.text).join('').includes('周三')&&v.sections.map(s=>s.text).join('').includes('预约')));fs.writeFileSync(path.join(folder,'probe.json'),JSON.stringify({result:'PASS',startedAt,checkedAt:new Date().toISOString(),request,native,scope:'One original synthetic Chinese source and two variants; factual quality and real brand/channel results are not generally verified.',generalFactualQualityVerified:false,realExternalActions:false},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:'PASS',variants:2,promptTokens:native.evidence.promptTokens,elapsedMs:native.evidence.elapsedMs}));}
+catch(error){fs.writeFileSync(path.join(folder,'probe.json'),JSON.stringify({result:'FAIL',startedAt,checkedAt:new Date().toISOString(),request,error:error instanceof Error?error.message:String(error)},null,2)+'\n',{flag:'wx'});throw error;}

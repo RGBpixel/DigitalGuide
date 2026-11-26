@@ -1,0 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {randomUUID,createHash} from 'node:crypto';
+import {denoisingModel} from '../packages/media/src/denoising-model.js';
+import {processLocalMedia} from '../packages/media/src/media-processing.js';
+import {mediaProcessingPayload} from '@digitalguide/contracts';
+const root=process.cwd(),file=path.resolve('storage/validation/denoising-native-probe/input.wav'),bytes=fs.readFileSync(file),directory=path.resolve('storage/validation/denoising-probe-'+randomUUID()),payload=mediaProcessingPayload.parse({name:'原生时序补偿验证',source:{id:randomUUID(),version:1,sha256:createHash('sha256').update(bytes).digest('hex'),size:bytes.length,mediaType:'audio/wav',name:'四秒合成白噪声',specs:{sampleRate:48000,channels:1,durationMs:4000},expiresAt:null,synthetic:true},configuration:{provider:'local-media',operation:'neural_denoise',startMs:0,durationMs:null,attenuationDb:100,postFilter:false},rights:{subject:'原创合成信号',proof:'代码生成白噪声，仅检查模型执行与时序，不代表语音质量',expiresAt:'2099-01-01T00:00:00.000Z',confirmed:true},engine:denoisingModel(root).engine});
+const result=await processLocalMedia({root,file,directory,payload},new AbortController().signal,()=>{});fs.writeFileSync('docs/evidence/T24/denoising/native-probe.json',JSON.stringify({result:'PASS_NATIVE_EXECUTION_AND_FRAME_COUNTS',originalDirectCompensatedOutputMs:3970,sourceDurationMs:4000,output:result.files.map(f=>({file:f.file,sha256:f.sha256,specs:f.specs})),metrics:result.report.metrics,qualityVerified:false},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({outputs:result.files.map(f=>f.specs),metrics:result.report.metrics}));

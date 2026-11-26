@@ -1,0 +1,43 @@
+.office-public-note { display:flex; align-items:flex-start; gap:12px; padding:18px 20px; border:1px solid #dfe9dc; border-radius:9px; background:#eff4e9; color:#42674d; margin-bottom:22px; }
+.office-public-note svg { flex-shrink:0; margin-top:2px; }
+.office-public-note strong { font-size:13px; }
+.office-public-note p { font-size:12px; line-height:1.8; margin-top:5px; }
+.office-tabs { display:flex; gap:5px; margin-bottom:22px; border-bottom:1px solid var(--border); }
+.office-tabs button { display:flex; align-items:center; gap:8px; padding:12px 18px; border:0; border-bottom:2px solid transparent; background:none; color:var(--muted); font-size:13px; }
+.office-tabs button.active { color:var(--green); border-bottom-color:var(--green); font-weight:600; }
+.office-columns { display:grid; grid-template-columns:minmax(310px,1fr) minmax(350px,1.15fr); gap:22px; align-items:start; }
+.office-body, .office-form { padding:22px; }
+.office-detail { margin-top:20px; }
+.office-help, .office-sender { font-size:12px; line-height:1.9; color:var(--muted); }
+.office-text { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.9; font-size:14px; color:#354c40; margin:12px 0 18px; }
+.office-notification { padding:20px; border:1px solid var(--border); border-radius:8px; margin-bottom:14px; }
+.office-notification.unread { border-left:3px solid #5f896f; background:#fcfdf9; }
+.office-notification h3 { margin-top:12px; font-size:16px; overflow-wrap:anywhere; }
+.office-item-top, .office-item-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.office-item-top > span:last-child, .office-item-footer > span { color:var(--muted); font-size:11px; }
+.office-item-footer > div { display:flex; gap:15px; align-items:center; flex-wrap:wrap; }
+.office-form { display:grid; gap:15px; }
+.office-form label:not(.checkbox-line) { display:flex; flex-direction:column; gap:8px; color:#738478; font-size:12px; }
+.office-form input:not([type=checkbox]), .office-form select, .office-form textarea { width:100%; min-width:0; border:1px solid var(--border); padding:10px 11px; border-radius:7px; background:#fdfefb; color:#324b3e; font:inherit; }
+.office-form textarea { min-height:100px; resize:vertical; }
+.office-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.office-list-row { width:100%; display:flex; gap:12px; align-items:center; justify-content:space-between; text-align:left; padding:15px; border:1px solid var(--border); border-radius:7px; background:#fff; margin-bottom:10px; min-width:0; }
+.office-list-row.selected { border-color:#85a391; background:#f5f8f0; }
+.office-list-row strong { display:block; font-size:13px; font-weight:550; overflow-wrap:anywhere; }
+.office-list-row small { display:block; font-size:11px; color:var(--muted); margin-top:8px; }
+.office-list-row > span:first-child { min-width:0; }
+.office-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:15px; margin:14px 0 20px; }
+.office-facts dt { font-size:11px; color:var(--muted); margin-bottom:6px; }
+.office-facts dd { font-size:12px; line-height:1.8; margin:0; overflow-wrap:anywhere; }
+.office-actions { display:flex; gap:15px; align-items:center; flex-wrap:wrap; margin:14px 0; }
+.office-receipt { padding:14px; background:#f4f7ef; border-radius:6px; margin-bottom:15px; font-size:12px; line-height:1.9; }
+.office-receipt span { display:block; color:var(--muted); }
+.office-members { border:1px solid var(--border); border-radius:7px; padding:14px; display:grid; gap:10px; }
+.office-members legend { color:var(--muted); font-size:12px; padding:0 5px; }
+.office-attendee-list { display:flex; gap:12px; flex-wrap:wrap; margin:16px 0; }
+.office-attendee-list > span { display:flex; gap:8px; align-items:center; font-size:12px; border:1px solid var(--border); border-radius:5px; padding:7px; }
+.office-detail .checkbox-line { margin-top:16px; align-items:flex-start; }
+.office-detail .office-help { margin-top:15px; }
+@media(max-width:1100px) { .office-columns { grid-template-columns:1fr; } }
+@media(max-width:600px) { .office-tabs button { padding:11px 9px; font-size:12px; gap:5px; } .office-tabs svg { width:14px; } .office-body, .office-form { padding:17px; } .office-fields, .office-facts { grid-template-columns:1fr; } .office-notification { padding:15px; } .office-list-row { align-items:flex-start; } }
+

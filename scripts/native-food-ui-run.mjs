@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+const label=process.argv[2];assert.match(label,/^[a-z][a-z0-9-]+$/);const root='docs/evidence/T20/postgres-food/ui';
+const hash=bytes=>createHash('sha256').update(bytes).digest('hex'),walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>['node_modules','.git'].includes(e.name)?[]:e.isDirectory()?walk(dir+'/'+e.name):[dir+'/'+e.name]);
+const sources=[...['apps','packages','tests'].flatMap(walk).filter(f=>/\.tsx?$/.test(f)),...walk('migrations').filter(f=>/\.(sql|json)$/.test(f)),...fs.readdirSync('scripts').filter(f=>f.endsWith('.ts')||/^native-(speaker|vision|restaurant|dining|food)-.*\.(mjs|sql)$/.test(f)).map(f=>'scripts/'+f),'scripts/build.mjs','scripts/build-docs.mjs','scripts/check-docs.mjs'],bindings=[];
+for(const file of new Set(sources)){const bytes=fs.readFileSync(file),sha256=hash(bytes),snapshot=root+'/sources/'+sha256+'/'+path.basename(file);fs.mkdirSync(path.dirname(snapshot),{recursive:true});if(!fs.existsSync(snapshot))fs.writeFileSync(snapshot,bytes,{flag:'wx'});assert.equal(hash(fs.readFileSync(snapshot)),sha256);bindings.push({file,sha256,snapshot});}
+const built=Object.fromEntries(walk('dist').map(file=>[file,hash(fs.readFileSync(file))]));assert.equal(Object.keys(built).length,76);
+const defaults=process.argv[3]==='--default',args=['--import','tsx',defaults?'scripts/native-food-default-proof.ts':'scripts/native-food-ui-proof.ts',label,...process.argv.slice(defaults?4:3)],fd=fs.openSync(root+'/'+label+'.log','wx'),startedAt=new Date().toISOString(),child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore',fd,fd]}),exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});fs.closeSync(fd);fs.writeFileSync(root+'/'+label+'-command.json',JSON.stringify({result:exitCode===0?'PASS':'FAIL',startedAt,finishedAt:new Date().toISOString(),exitCode,command:[process.execPath,...args],bindings,built},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({label,exitCode,result:exitCode===0?'PASS':'FAIL'}));process.exitCode=exitCode;

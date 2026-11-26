@@ -1,0 +1,6 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {chromium} from '@playwright/test';
+const root='docs/evidence/T20/postgres-hospitality/ui',source=JSON.parse(fs.readFileSync(root+'/service-preview-continued/staff-form-after-current-read.json','utf8'));
+assert.equal(source.length,1);const browser=await chromium.launch({channel:'chrome',headless:true});
+try{const page=await browser.newPage();await page.setContent('<form aria-label="本次服务请求">'+source[0].html+'</form>');const form=page.getByRole('form',{name:'本次服务请求',exact:true}),textbox=form.getByRole('textbox',{name:'本次服务说明',exact:true}),report={result:'PASS_RETAINED_TEXTAREA_LABEL_DIAGNOSIS',retainedFormCount:await form.count(),wrappedExactLabelCount:await form.getByLabel('本次服务说明',{exact:true}).count(),accessibleTextboxCount:await textbox.count(),actualValue:await textbox.inputValue(),source:'service-preview-continued/staff-form-after-current-read.json',databaseOrBusinessActionsUsed:false};assert.equal(report.wrappedExactLabelCount,0);assert.equal(report.accessibleTextboxCount,1);assert.equal(report.actualValue,'原创员工尚未提交的服务草稿');fs.writeFileSync(root+'/label-diagnostic.json',JSON.stringify(report,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify(report));}finally{await browser.close();}

@@ -1,0 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const base='docs/evidence/T20/postgres-live-terminal',prior=JSON.parse(fs.readFileSync(base+'/upgrade-handoff.json','utf8')),hash=f=>createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+assert.equal(fs.existsSync(path.join(prior.root,'data/postmaster.pid')),false);for(const[file,sha]of Object.entries(prior.entrySHA256))assert.equal(hash(path.join(prior.compiledOnlyRoot,file)),sha,file);
+const archive=path.join(prior.root,'before-legacy-reason-api.mjs');if(!fs.existsSync(archive))fs.copyFileSync(path.join(prior.compiledOnlyRoot,'dist/api.mjs'),archive,fs.constants.COPYFILE_EXCL);assert.equal(hash(archive),hash(path.join(prior.compiledOnlyRoot,'dist/api.mjs')));for(const file of Object.keys(prior.original76ProgramSHA256))if(!['dist/api.mjs','dist/worker.mjs'].includes(file))assert.equal(hash(file),hash(path.join(prior.compiledOnlyRoot,file)),file);
+fs.copyFileSync(path.join(prior.compiledOnlyRoot,'dist/worker.mjs'),path.join(prior.root,'before-legacy-reason-worker.mjs'),fs.constants.COPYFILE_EXCL);fs.copyFileSync(path.resolve('dist/worker.mjs'),path.join(prior.compiledOnlyRoot,'dist/worker.mjs'));fs.copyFileSync(path.resolve('dist/api.mjs'),path.join(prior.compiledOnlyRoot,'dist/api.mjs'));const entrySHA256=Object.fromEntries(Object.keys(prior.entrySHA256).map(file=>[file,hash(file)]));
+fs.writeFileSync(base+'/upgrade-handoff-final.json',JSON.stringify({...prior,result:'VERIFIED_NATIVE_AND_SQLITE_TERMINAL_REASON_BINARY_UPGRADE',checkedAt:new Date().toISOString(),entrySHA256,priorHandoff:base+'/upgrade-handoff.json',priorHandoffSHA256:hash(base+'/upgrade-handoff.json'),legacyApiBeforeFixArchive:archive,postgresDataOrClockOrCounterModified:false},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:'PASS',privateDatabaseUnchanged:true,other74ProgramsExact:true}));

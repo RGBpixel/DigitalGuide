@@ -1,0 +1,16 @@
+import {randomUUID} from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import {describe,it,expect} from 'vitest';
+import {mediaProcessingPayload,mediaProcessingConfiguration} from '@digitalguide/contracts';
+import {mediaProcessingPlan} from '../../packages/domain/src/media-processing.js';
+import {canonical} from '@digitalguide/domain';
+import {denoisingModel,requireDenoisingEngine} from '../../packages/media/src/denoising-model.js';
+function payload(){return mediaProcessingPayload.parse({name:'神经降噪方案',source:{id:randomUUID(),version:1,sha256:'a'.repeat(64),size:20000,mediaType:'audio/wav',name:'原创音频',specs:{durationMs:1234,sampleRate:44100,channels:2},expiresAt:null,synthetic:true},configuration:{provider:'local-media',operation:'neural_denoise',startMs:0,durationMs:null,attenuationDb:100,postFilter:false},engine:denoisingModel(process.cwd()).engine,rights:{subject:'原创作者',proof:'本项目原创合成测试声音素材',expiresAt:'2099-01-01T00:00:00.000Z',confirmed:true}});}
+describe('固定神经降噪契约与旧方案',()=>{
+ it('固定模型/运行器/看护及30ms时延策略，输出保持原始音频规格',()=>{const p=payload(),plan=mediaProcessingPlan(p);expect(plan.outputs[0]).toMatchObject({mediaType:'audio/wav',durationMs:1234,alpha:false});expect(p.engine).toMatchObject({modelId:'deepfilternet3-onnx-v0.5.6',runtime:'deep-filter-windows-tract',runtimeVersion:'0.5.6'});expect(requireDenoisingEngine(process.cwd(),p,true).engine).toEqual(p.engine);});
+ it('旧频谱方案解析不新增模型/新默认字段，原配置与规范化摘要输入保持',()=>{const p=payload();p.configuration={provider:'local-media',operation:'denoise',startMs:0,durationMs:null,noiseReduction:12,noiseFloor:-50,trackNoise:true};delete p.engine;const parsed=mediaProcessingPayload.parse(JSON.parse(JSON.stringify(p)));expect(parsed).toEqual(p);expect(canonical(parsed)).toBe(canonical(p));expect(parsed).not.toHaveProperty('engine');expect(mediaProcessingPlan(p).warnings.join('')).not.toContain('神经');});
+ it('图片、无原声视频、不支持的通道和模型冒用均拒绝',()=>{const p=payload();p.source.mediaType='image/png';expect(()=>mediaProcessingPlan(p)).toThrow('降噪需要');p.source.mediaType='video/mp4';p.source.specs.hasAudio=0;expect(()=>mediaProcessingPlan(p)).toThrow('降噪需要');p.source.mediaType='audio/wav';p.source.specs.channels=6;expect(()=>mediaProcessingPlan(p)).toThrow('双声道');p.source.specs.channels=1;p.engine=undefined;expect(()=>mediaProcessingPlan(p)).toThrow('没有接入');});
+ it('有界参数、范围、模型指纹和策略变化不得默默退回频谱',()=>{expect(mediaProcessingConfiguration.safeParse({provider:'local-media',operation:'neural_denoise',attenuationDb:0,postFilter:false}).success).toBe(false);const p=payload();if(p.configuration.operation!=='neural_denoise'||!p.engine)throw Error();p.configuration.startMs=1200;p.configuration.durationMs=200;expect(()=>mediaProcessingPlan(p)).toThrow('区间');p.configuration.startMs=0;p.configuration.durationMs=null;p.engine.modelSha256='f'.repeat(64);expect(()=>requireDenoisingEngine(process.cwd(),p,true)).toThrow('变化');});
+ it('安装文件缺失或字节不符时明确失败，不使用系统PATH中的其他程序',()=>{const root=path.resolve('storage/test-runs',randomUUID());fs.mkdirSync(path.join(root,'storage/tools/denoising'),{recursive:true});expect(()=>denoisingModel(root,true)).toThrow('尚未安装');fs.writeFileSync(path.join(root,'storage/tools/denoising/deep-filter.exe'),'invalid',{flag:'wx'});expect(()=>denoisingModel(root,true)).toThrow('校验不符');});
+});

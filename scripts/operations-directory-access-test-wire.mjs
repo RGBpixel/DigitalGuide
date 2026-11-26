@@ -1,0 +1,4 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const file='docs/evidence/T35/enterprise-directory-access/check-runner.mjs';let source=fs.readFileSync(file,'utf8');assert.ok(source.includes('const commands={'));source=source.replace('const commands={',()=>"const commands={'directory-access-authority-sqlite':tests(['tests/integration/enterprise-directory-access-authority.test.ts']),'directory-access-authority-native':tests(['tests/integration/postgres-enterprise-directory-access-authority.test.ts']),");fs.writeFileSync(file,source);
+const migration='tests/unit/postgres-runtime.test.ts';source=fs.readFileSync(migration,'utf8');assert.ok(source.includes("'135-native-enterprise-directory.sql']"));fs.writeFileSync(migration,source.replace("'135-native-enterprise-directory.sql']","'135-native-enterprise-directory.sql','136-native-directory-group-access.sql']"));

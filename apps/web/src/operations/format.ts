@@ -1,0 +1,2 @@
+// Format the declared currency's minor unit without floating-point division.
+export function formatOperationsCost(value:number,currency:string){const formatter=new Intl.NumberFormat('zh-CN',{style:'currency',currency}),digits=formatter.resolvedOptions().maximumFractionDigits??2,amount=BigInt(value),scale=10n**BigInt(digits),fraction=(amount%scale).toString().padStart(digits,'0');return formatter.formatToParts(amount/scale).map(p=>p.type==='fraction'?fraction:p.value).join('');}

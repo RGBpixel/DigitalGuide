@@ -1,0 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import type {EditorState} from './local-editor-fixture.js';
+import {inspectEditorPage} from './local-editor-browser-support.js';
+const folder=path.resolve(process.env.EDITOR_BROWSER_DIR||'docs/evidence/T24/local-editor/runtime/browser-final'),state=JSON.parse(fs.readFileSync('storage/local-editor-preview-state.json','utf8')) as EditorState,previewSession=process.env.PREVIEW_SESSION_HANDLE;assert.ok(previewSession);fs.mkdirSync(folder,{recursive:true});const file=path.join(folder,'browser.json');assert.ok(!fs.existsSync(file));try{const report=await inspectEditorPage('http://127.0.0.1:5174',state,folder);fs.writeFileSync(file,JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),previewSession,projectId:state.projectId,sessionId:state.sessionId,...report,readOnly:true},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:'PASS',checks:report.checks.length,previewSession}));}catch(error){fs.writeFileSync(file,JSON.stringify({result:'FAIL',checkedAt:new Date().toISOString(),previewSession,message:error instanceof Error?error.message:String(error)},null,2)+'\n',{flag:'wx'});throw error;}

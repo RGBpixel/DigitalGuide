@@ -1,0 +1,4 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const file='scripts/operations-metrics-proof.ts';let s=fs.readFileSync(file,'utf8');const a="const mobileCtx=await h.context(c.cookie);await mobileCtx.setViewportSize({width:390,height:844});const mobile=await h.page(mobileCtx);",b="const mobileCtx=await h.context(c.cookie),mobile=await h.page(mobileCtx);await mobile.setViewportSize({width:390,height:844});";assert.ok(s.includes(a));s=s.replace(a,()=>b);const redundant='));await releaseHeld?.();assert.deepEqual(h.errors,[])';assert.ok(s.includes(redundant));s=s.replace(redundant,()=>'));assert.deepEqual(h.errors,[])');fs.writeFileSync(file,s);
+const migration='scripts/operations-metrics-migration.ts';s=fs.readFileSync(migration,'utf8');s=s.replaceAll(String.fromCharCode(92,34),'"');fs.writeFileSync(migration,s);console.log('PASS proof viewport and narrowed cleanup types fixed; generation-only quote lint cleaned');

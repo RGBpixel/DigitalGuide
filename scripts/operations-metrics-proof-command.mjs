@@ -1,0 +1,3 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const f='docs/evidence/T35/operations-metrics/check-runner.mjs';let s=fs.readFileSync(f,'utf8');assert.ok(!s.includes("'operations-compiled':"));s=s.replace('const commands={',()=>"const commands={'operations-compiled':['--import','tsx','scripts/operations-metrics-proof.ts','operations-compiled'],");fs.writeFileSync(f,s);let p=fs.readFileSync('PLAN.md','utf8');p=p.replace('独立原生001—128/runtime125冻结，下一129',()=> '独立原生001—129/runtime126冻结，下一130');fs.writeFileSync('PLAN.md',p);console.log('PASS compiled operations proof registered; SQL129 first-commit freeze recorded');

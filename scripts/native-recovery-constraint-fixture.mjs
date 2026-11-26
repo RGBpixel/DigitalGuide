@@ -1,0 +1,5 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const input='docs/evidence/T20/postgres-recovery/constraint-details.json',d=JSON.parse(fs.readFileSync(input,'utf8')),rows=d.groups[0].fieldDifferences;assert.equal(rows.length,16);assert.ok(rows.every(r=>r.field==='definition'&&r.source.startsWith('CHECK (')&&r.target.startsWith('CHECK (')));
+const file='packages/test-fixtures/recovery-check-roundtrip.json';fs.writeFileSync(file,JSON.stringify(rows.map(r=>({table:r.identity.relname,name:r.identity.conname,source:r.source,target:r.target})),null,2)+'\n',{flag:'wx'});fs.writeFileSync('docs/evidence/T20/postgres-recovery/constraint-fixture-provenance.json',JSON.stringify({result:'PASS_EXTRACTED_OBSERVED_STATIC_CHECK_DEFINITIONS',input,inputSHA256:createHash('sha256').update(fs.readFileSync(input)).digest('hex'),output:file,outputSHA256:createHash('sha256').update(fs.readFileSync(file)).digest('hex'),pairs:16,containsUserRows:false},null,2)+'\n',{flag:'wx'});

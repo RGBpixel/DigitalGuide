@@ -1,0 +1,25 @@
+{
+  "scope": "Frozen project-owned synthetic calendar cases; independently report actual model opinions and explicit-rule findings. Not an external blind or general language-quality benchmark.",
+  "cases": [
+    {"id":"calendar-01","source":"展厅每天09:00—17:00开放，周三闭馆。","text":"周三闭馆，其他工作日09:00到17:00开放。","supported":false,"expectedRule":true},
+    {"id":"calendar-02","source":"展厅每天09:00—17:00开放。","text":"展厅仅周一至周五09:00到17:00开放。","supported":false,"expectedRule":true},
+    {"id":"calendar-03","source":"展厅工作日09:00—17:00开放。","text":"展厅每天09:00到17:00开放。","supported":false,"expectedRule":true},
+    {"id":"calendar-04","source":"展厅周末10:00—16:00开放。","text":"展厅每天10:00到16:00开放。","supported":false,"expectedRule":true},
+    {"id":"calendar-05","source":"展厅周一至周五09:00—17:00开放。","text":"展厅工作日09:00到17:00开放。","supported":true,"expectedRule":false},
+    {"id":"calendar-06","source":"展厅每天09:00—17:00开放，周三闭馆。","text":"周三闭馆，其余每天09:00至17:00开放。","supported":true,"expectedRule":false},
+    {"id":"calendar-07","source":"展厅每天09:00—17:00开放，周三闭馆。","text":"展厅每天09:00到17:00开放。","supported":false,"expectedRule":true},
+    {"id":"calendar-08","source":"展厅每天09:00—17:00开放，周三闭馆。","text":"展厅每天09:00到17:00开放，周二闭馆。","supported":false,"expectedRule":true},
+    {"id":"calendar-09","source":"展厅每天09:00—17:00开放，周三闭馆。","text":"展厅周三09:00到17:00开放。","supported":false,"expectedRule":true},
+    {"id":"calendar-10","source":"展厅每天09:00—17:00开放。","text":"展厅每天17:00到09:00开放。","supported":false,"expectedRule":true},
+    {"id":"calendar-11","source":"展厅工作日09:00—17:00开放。","text":"展厅每天09:00到17:00开放，但周六、周日不开放。","supported":true,"expectedRule":false},
+    {"id":"calendar-12","source":"展厅每天09:00—17:00开放。工作日可联系管理员。","text":"展厅每天09:00到17:00开放。工作日可联系管理员。","supported":true,"expectedRule":false},
+    {"id":"calendar-13","source":"展厅每天09:00—17:00开放。","text":"例如周五，展厅09:00到17:00也开放。","supported":true,"expectedRule":false},
+    {"id":"calendar-14","source":"展厅周六、周日10:00—16:00开放。","text":"展厅只在周末10:00到16:00开放。","supported":true,"expectedRule":false},
+    {"id":"calendar-15","source":"The gallery opens daily from 09:00 to 17:00. It is closed on Wednesday.","text":"The gallery opens on weekdays from 09:00 to 17:00 and is closed on Wednesday.","supported":false,"expectedRule":true},
+    {"id":"calendar-16","source":"The gallery opens on weekdays from 09:00 to 17:00.","text":"The gallery opens daily from 09:00 to 17:00.","supported":false,"expectedRule":true},
+    {"id":"calendar-17","source":"The gallery opens Monday through Friday from 09:00 to 17:00.","text":"The gallery opens on weekdays from 09:00 to 17:00.","supported":true,"expectedRule":false},
+    {"id":"calendar-18","source":"The gallery opens daily from 09:00 to 17:00. It is closed on Wednesday.","text":"The gallery opens daily from 09:00 to 17:00.","supported":false,"expectedRule":true},
+    {"id":"calendar-19","source":"The gallery opens at weekends from 10:00 to 16:00.","text":"The gallery opens daily from 10:00 to 16:00.","supported":false,"expectedRule":true},
+    {"id":"calendar-20","source":"The gallery opens daily from 09:00 to 17:00.","text":"For example, the gallery opens on Friday from 09:00 to 17:00.","supported":true,"expectedRule":false}
+  ]
+}

@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+assert.equal(fs.existsSync('docs/evidence/T35/developer-studio/062-first-committed.json'),false);assert.equal(fs.existsSync('docs/evidence/T35/developer-studio/141-first-committed.json'),false);
+for(const file of ['scripts/operations-developer-studio-control.sql','migrations/postgres/141-native-developer-studio.sql']){let source=fs.readFileSync(file,'utf8');source=source.replaceAll('jsonb_array_elements_text(NEW.actions::jsonb) v WHERE v NOT IN','jsonb_array_elements_text(NEW.actions::jsonb) AS elements(value) WHERE value NOT IN').replaceAll('count(DISTINCT v) FROM jsonb_array_elements_text(NEW.actions::jsonb) v','count(DISTINCT value) FROM jsonb_array_elements_text(NEW.actions::jsonb) AS elements(value)').replaceAll("jsonb_array_elements_text(NEW.actions::jsonb) v WHERE v LIKE 'exports.%'","jsonb_array_elements_text(NEW.actions::jsonb) AS elements(value) WHERE value LIKE 'exports.%'");fs.writeFileSync(file,source);}
+const resource=`CREATE TRIGGER developer_studio_operation_resource BEFORE INSERT ON developer_studio_operations BEGIN
+ SELECT CASE WHEN NEW.kind IN('project.created','project.saved') AND NOT EXISTS(SELECT 1 FROM studio_projects p WHERE p.id=NEW.project_id AND NEW.resource_id=p.id AND p.version=NEW.resource_version) THEN RAISE(ABORT,'Developer studio project receipt is invalid') END;
+ SELECT CASE WHEN NEW.kind IN('export.created','export.cancelled') AND NOT EXISTS(SELECT 1 FROM studio_exports e WHERE e.id=NEW.resource_id AND e.project_id=NEW.project_id AND e.tenant_id=NEW.tenant_id AND e.workspace_id=NEW.workspace_id AND e.environment=NEW.environment AND e.app_env=NEW.app_env AND e.project_version=NEW.resource_version) THEN RAISE(ABORT,'Developer studio export receipt is invalid') END;
+ SELECT CASE WHEN NEW.kind='file.download_started' AND NOT EXISTS(SELECT 1 FROM studio_export_artifacts a JOIN studio_exports e ON e.id=a.export_id WHERE a.id=NEW.resource_id AND e.project_id=NEW.project_id AND e.tenant_id=NEW.tenant_id AND e.workspace_id=NEW.workspace_id AND e.environment=NEW.environment AND e.app_env=NEW.app_env AND e.project_version=NEW.resource_version AND e.status='succeeded') THEN RAISE(ABORT,'Developer studio artifact receipt is invalid') END;
+END;
+`;
+const generator='scripts/operations-developer-studio-sql.mjs',source=fs.readFileSync(generator,'utf8'),anchor='CREATE TRIGGER developer_studio_origin_scope BEFORE INSERT ON developer_studio_job_origins BEGIN';assert.ok(source.includes(anchor));fs.writeFileSync(generator,source.replace(anchor,resource+anchor));
+fs.appendFileSync('migrations/sqlite/062-developer-studio.sql','\n'+resource);
+console.log(JSON.stringify({result:'UNCOMMITTED_DEVELOPER_STUDIO_SQL_RESOURCE_GUARDS_QUALIFIED'}));

@@ -1,0 +1,14 @@
+import {AsyncLocalStorage} from 'node:async_hooks';
+import {AppError,canonical,type Principal} from '../../domain/src/index.js';
+import {studioDocumentInput} from '../../contracts/src/index.js';
+import {nativeSpeechHash,nativeSpeechOutput,type NativeSpeechInput} from './runtime-speech-jobs.js';
+import type {NativeCoreRepository} from './runtime-repository.js';
+const pathContext=new AsyncLocalStorage<Set<string>>();
+export async function verifyNativeSpeechOrigin(core:NativeCoreRepository,p:Principal,asset:{id:string;workspaceId:string;mediaType:string;sha256:string;size:string|number;storage_key:string;expiresAt:string|null},purpose?:'video'|'presentation'):Promise<{jobId:string;segmentId:string;purpose:'video'|'presentation'}>{
+ const path=pathContext.getStore();if(!path)return pathContext.run(new Set(),()=>verifyNativeSpeechOrigin(core,p,asset,purpose));if(path.has(asset.id)||path.size>=12)throw new AppError('SPEECH_ORIGIN_CYCLE','配音来源形成循环或超过十二层，请重新核对原稿。',409);path.add(asset.id);
+ try{
+  const row=(await core.db.query<NativeSpeechInput&{segment_id:string;not_after:string|null;outputs:string;status:string}>('SELECT i.*,s.segment_id,s.not_after,o.outputs,j.status FROM _dg_native_speech_assets s JOIN _dg_native_speech_inputs i ON i.job_id=s.job_id JOIN _dg_native_speech_outputs o ON o.job_id=s.job_id JOIN studio_speech_jobs j ON j.id=s.job_id WHERE s.asset_id=$1',[asset.id])).rows[0];if(!row||row.tenant_id!==p.tenantId||row.workspace_id!==asset.workspaceId||row.status!=='succeeded'||asset.mediaType!=='audio/wav')throw new AppError('SPEECH_ORIGIN_CHANGED','合成音频缺少当前固定生成来源。',409);
+  const raw=JSON.parse(row.outputs) as unknown[];if(!Array.isArray(raw))throw new AppError('SPEECH_ORIGIN_CHANGED','合成音频输出凭据无效。',409);const outputs=raw.map(o=>nativeSpeechOutput.parse(o)),output=outputs.find(o=>o.segmentId===row.segment_id),snapshot=JSON.parse(row.source_snapshot) as {document:unknown;notAfter:string|null};if(!output||output.storageKey!==asset.storage_key||output.sha256!==asset.sha256||output.size!==Number(asset.size)||nativeSpeechHash(snapshot)!==row.source_hash||snapshot.notAfter!==row.not_after||row.not_after&&(row.not_after<=await core.db.now()||!asset.expiresAt||asset.expiresAt>row.not_after))throw new AppError('SPEECH_ORIGIN_CHANGED','合成音频字节、原稿或最短期限不符。',409);
+  const {NativeStudioResources}=await import('./runtime-studio-resources.js'),current=await new NativeStudioResources(core).inspect(p,row.workspace_id,purpose??row.purpose,studioDocumentInput.parse(snapshot.document));if(canonical(current.snapshot)!==canonical(snapshot))throw new AppError('SPEECH_ORIGIN_CHANGED','合成音频的原稿素材、角色、授权或文档来源已变化。',409);return{jobId:row.job_id,segmentId:row.segment_id,purpose:row.purpose};
+ }catch(e){if(e instanceof AppError)throw e;throw new AppError('SPEECH_ORIGIN_CHANGED','合成音频的固定来源格式无效，请重新核对原稿和音频。',409);}finally{path.delete(asset.id);}
+}

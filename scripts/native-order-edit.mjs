@@ -1,0 +1,8 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const replace=(value,before,after)=>{assert.equal(value.split(before).length,2,before);return value.replace(before,after);};
+let file='apps/worker/src/postgres-core.ts',value=fs.readFileSync(file,'utf8');
+value=replace(value,"import {NativeFood} from '../../../packages/postgres/src/runtime-food.js';","import {NativeOrders} from '../../../packages/postgres/src/runtime-orders.js';");value=replace(value,'dining=new NativeFood(repo,config.sessionSecret)','dining=new NativeOrders(repo,config.sessionSecret)');fs.writeFileSync(file,value);
+file='packages/contracts/src/orders-openapi.ts';value=fs.readFileSync(file,'utf8');
+value=replace(value,"function post(path:string,schema:z.ZodObject,result:z.ZodType,summary:string){const body=path.startsWith('/guest/')&&'focusVersion' in schema.shape?schema.extend({focusVersion:z.int().nonnegative()}):schema;paths[path]", "function post(path:string,schema:z.ZodObject,result:z.ZodType,summary:string){const guest=path.startsWith('/guest/'),body=guest&&'focusVersion' in schema.shape?schema.extend({focusVersion:z.int().nonnegative()}):schema,nativeBody=guest?schema.extend({focusVersion:z.int().nonnegative(),selectionVersion:z.int().nonnegative()}):null,requestSchema=nativeBody?{oneOf:[z.toJSONSchema(body,{io:'input'}),z.toJSONSchema(nativeBody,{io:'input'})],'x-native-postgres-schema-index':1,description:'原生PostgreSQL顾客接口使用第二分支，必须携带当前focusVersion与selectionVersion；SQLite使用第一分支。'}:z.toJSONSchema(body,{io:'input'});paths[path]");
+value=replace(value,"schema:z.toJSONSchema(body,{io:'input'})","schema:requestSchema");fs.writeFileSync(file,value);

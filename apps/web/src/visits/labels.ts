@@ -1,0 +1,5 @@
+export const visitLabels: Record<string, string> = { draft: '登记草稿', awaiting_confirmation: '待访客确认', notifying: '待通知 / 通知中', waiting_host: '等待接待人', accepted: '同意接待', declined: '暂不接待', escalated: '人工处理中', completed: '已结束', cancelled: '已取消' };
+export const deliveryLabels: Record<string, string> = { queued: '排队中（模拟）', submitting: '提交中（模拟）', submitted: '渠道已接受（模拟）', delivered: '已送达（模拟）', acknowledged: '已确认查看（模拟）', failed: '通知失败（模拟）', unknown: '结果未知（模拟）', cancelled: '未发送 / 已取消' };
+const localDeliveryLabels: Record<string,string> = {queued:'等待本地处理',submitting:'正在建立本地请求',submitted:'本地收件箱已建立',delivered:'本地请求已送达',acknowledged:'本地请求已查看',failed:'本地请求失败',unknown:'本地处理结果待核实',cancelled:'本地请求未提交 / 已取消'};
+export function deliveryLabel(delivery:{status:string;channel?:'local'|'mock'}) { return (delivery.channel==='local'?localDeliveryLabels:deliveryLabels)[delivery.status]??'状态待核实'; }
+export function visitTone(status: string) { return ['accepted', 'completed'].includes(status) ? 'green' : ['declined', 'escalated'].includes(status) ? 'red' : 'amber'; }

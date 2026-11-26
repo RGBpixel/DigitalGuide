@@ -1,0 +1,5 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+let source=fs.readFileSync('scripts/native-dining-food-checks.mjs','utf8');assert.equal(source.split("const root='docs/evidence/T20/postgres-food'").length,2);
+source=source.replace("const root='docs/evidence/T20/postgres-food'","const root='docs/evidence/T20/postgres-billing'").replace('/^native-(speaker|vision|restaurant|dining)-.*\\.(mjs|sql)$/','/^native-(speaker|vision|restaurant|dining|food|order|billing)-.*\\.(mjs|sql)$/').replace("core:tests(['tests/integration/postgres-food.test.ts'])","core:tests(['tests/integration/postgres-billing.test.ts'])").replace("unit:tests(['tests/unit/postgres-runtime.test.ts'])","unit:tests(['tests/unit/postgres-runtime.test.ts','tests/unit/native-order-contract.test.ts','tests/unit/native-billing-contract.test.ts'])");
+const file='docs/evidence/T20/postgres-billing/check-runner.mjs';if(fs.existsSync(file))assert.equal(fs.readFileSync(file,'utf8'),source);else fs.writeFileSync(file,source,{flag:'wx'});await import('../'+file);

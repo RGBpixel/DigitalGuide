@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "speaker-focus-synthetic-v1",
+  "frozenAt": "2026-11-19T00:00:00.000Z",
+  "mode": "simulated",
+  "hardware": {
+    "microphone": "未采样，合成输入字段示例",
+    "loudspeaker": "未采样，模拟回声事件",
+    "channels": 1,
+    "sampleRateHz": 16000,
+    "distanceM": 1,
+    "angleDeg": 0,
+    "rt60Ms": 300,
+    "preprocessing": "none; schema fixture only",
+    "sdkVersion": "mock-focus-v1",
+    "asrVersion": "fixed-fixture-v1"
+  },
+  "consentEvidenceIds": [],
+  "scenarios": [
+    {
+      "id": "lobby-0-0",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 0,
+      "overlapRatio": 0.0
+    },
+    {
+      "id": "lobby-0-25",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 0,
+      "overlapRatio": 0.25
+    },
+    {
+      "id": "lobby-0-50",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 0,
+      "overlapRatio": 0.5
+    },
+    {
+      "id": "lobby-5-0",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 5,
+      "overlapRatio": 0.0
+    },
+    {
+      "id": "lobby-5-25",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 5,
+      "overlapRatio": 0.25
+    },
+    {
+      "id": "lobby-5-50",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 5,
+      "overlapRatio": 0.5
+    },
+    {
+      "id": "lobby-10-0",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 10,
+      "overlapRatio": 0.0
+    },
+    {
+      "id": "lobby-10-25",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 10,
+      "overlapRatio": 0.25
+    },
+    {
+      "id": "lobby-10-50",
+      "noise": "模拟前台邻近交谈/自声，非实录",
+      "snrDb": 10,
+      "overlapRatio": 0.5
+    }
+  ],
+  "thresholds": {
+    "targetRetentionMin": 0.95,
+    "otherTriggerMax": 0.01,
+    "wrongSwitchMax": 0.01,
+    "bargeInSuccessMin": 0.95,
+    "p95ReplyMsMax": 2500,
+    "p95StopMsMax": 500,
+    "minTarget": 100,
+    "minOther": 300,
+    "minBargeIn": 50,
+    "businessMisoperationsMax": 0
+  }
+}

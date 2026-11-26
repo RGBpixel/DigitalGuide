@@ -1,0 +1,3 @@
+import {renderLiveRecording,type LiveRecordingRenderInput} from './live-recording-render.js';
+const abort=new AbortController();let started=false;process.once('disconnect',()=>abort.abort());process.once('SIGTERM',()=>abort.abort());
+process.on('message',async(message:LiveRecordingRenderInput|{cancel:true})=>{if('cancel'in message){abort.abort();return;}if(started)return;started=true;try{const result=await renderLiveRecording(message,abort.signal);if(process.connected&&!abort.signal.aborted)process.send?.({result});}catch(error){if(process.connected)process.send?.({error:error instanceof Error?error.message:'本地节目归档失败。'});}finally{if(process.connected)process.disconnect();}});

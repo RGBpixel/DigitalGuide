@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T20/postgres-recovery-guard',parentFile='docs/evidence/T20/postgres-proactive-ui/verification.json';
+const hash=f=>createHash('sha256').update(fs.readFileSync(f)).digest('hex'),parent=JSON.parse(fs.readFileSync(parentFile,'utf8'));
+assert.equal(parent.result,'PASS_STAGED_NATIVE_PROACTIVE_UI_CONSENT_PRIVACY_NATURAL_COOLDOWN_MOBILE_RESTART');
+let hashes=0;for(const map of [parent.sourceSHA256,parent.documents,parent.evidenceSHA256])for(const[f,sha]of Object.entries(map)){assert.equal(hash(f),sha,f);hashes++;}
+const registry=JSON.parse(fs.readFileSync('migrations/postgres/runtime.json','utf8'));assert.equal(registry.version,121);for(const m of registry.migrations)assert.equal(hash('migrations/postgres/'+m.name),m.sha256,m.name);
+fs.mkdirSync(root,{recursive:false});const documents={};for(const[f,sha256]of Object.entries(parent.documents)){const snapshot=root+'/parent-documents/'+sha256+'/'+path.basename(f);fs.mkdirSync(path.dirname(snapshot),{recursive:true});fs.copyFileSync(f,snapshot,fs.constants.COPYFILE_EXCL);documents[f]={sha256,snapshot};}
+const start={result:'PASS_NATIVE_RECOVERY_GUARD_START_REVALIDATED',checkedAt:new Date().toISOString(),parentFile,parentSHA256:hash(parentFile),parentHashesVerified:hashes,documents,scope:parent.scope,previousGoalTurnClassification:'progress',currentGoalTurnClassification:'progress',goalStatus:'active',requirements:['R-058','R-059'],runtime:121,nextMigration:'125',sqliteMigration:'052',nextSqliteMigration:'053',mainHandle:'33223',mainRestarted:false,mainCutOver:false,earlierSealedRootsReactivated:false,work:['Reject native database and programmatic API access under maintenance or recovery quarantine','Reject new pooled transactions and roll back work if quarantine appears before commit','Fresh private PostgreSQL fixture only; no restart of sealed proofs or the main workbench','Native encrypted backup, consistent restore, post-backup revocation/deletion and activation remain unfinished']};
+fs.writeFileSync(root+'/phase-start.json',JSON.stringify(start,null,2)+'\n',{flag:'wx'});
+const file='PLAN.md',old=fs.readFileSync(file,'utf8');fs.writeFileSync(file,old.replace(/当前增量：[^\n]*/,()=> '当前增量：122，补齐原生PostgreSQL维护/恢复隔离的直接调用与已打开连接保护；本轮检查尚未执行。备份恢复全链路及全部平台/T20/G2/目标继续。').replace('\n2026-11-25 增量121',()=> '\n2026-11-25 增量122开始：121最终清单及'+hashes+'份当前文件已核对。发现程序化createApp及直接NativePostgresDatabase.open不经过loadConfig的恢复检查；本轮在原生数据库边界统一拒绝运维锁与恢复副本，并保护池化事务的入口和提交。尚未声称执行本轮验证；原生加密备份/一致恢复/恢复后撤回删除和生产激活继续待实现。主33223和旧封存根不启动、不重启、不切库；001—124/runtime121与SQLite052冻结，下一125/053，134/38/65/26及27本地verified保持。\n\n2026-11-25 增量121'));
+console.log(JSON.stringify({result:start.result,parentHashesVerified:hashes,runtime:121,nextMigration:'125',goal:'active'}));

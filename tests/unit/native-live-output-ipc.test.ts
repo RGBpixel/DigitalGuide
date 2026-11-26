@@ -1,0 +1,20 @@
+import {power} from '../e2e/live-peer-browser-helpers.js';
+import {threeProgrammeColours,programmeBlockPower} from '../../scripts/native-live-programme-measure.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import {afterEach,describe,it,expect} from 'vitest';
+import {runLiveOutputAsync,type NativeOutputCallbackObservation} from '../../packages/media/src/run-live-output-async.js';
+
+// Transport fixtures contain no encoder, RTP, physical device or database evidence.
+const roots:string[]=[];
+afterEach(()=>{for(const root of roots.splice(0)){if(!root.startsWith(path.resolve('storage/validation')+path.sep))throw new Error('Unexpected fixture path');fs.rmSync(root,{recursive:true,force:true});}});
+function fixture(body:string){fs.mkdirSync('storage/validation',{recursive:true});const root=fs.mkdtempSync(path.resolve('storage/validation/native-live-ipc-'));roots.push(root);const file=path.join(root,'packages/media/src/live-output-worker.ts');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,"process.on('message',m=>{if(m.type==='init'){"+body+"}else if(m.type==='cancel'){process.disconnect();}});\n");return{root,directory:root,videos:[],background:null,music:null,pipCueId:null,startFrame:0};}
+describe('原生媒体IPC背压与逐帧顺序',()=>{
+ it('分块能量保留相位跳变的实际音调，不把整秒相消当成静音',()=>{const bytes=Buffer.alloc(96000);for(let n=0;n<48000;n++)bytes.writeInt16LE(Math.round(Math.sin(2*Math.PI*1100*n/48000)*6553*(Math.floor(n/4800)%2?-1:1)),n*2);const measured=programmeBlockPower(bytes,1100);expect(power(bytes,1100)).toBeLessThan(1e-8);expect(measured.blocks).toBe(10);expect(measured.min).toBeGreaterThan(.009);expect(measured.mean).toBeGreaterThan(.009);});
+ it('画面证据必须区分第三位紫色来宾与蓝色节目背景',()=>{const first=[[31,200,95,255],[220,64,49,255]];expect(threeProgrammeColours([...first,[20,60,160,255]])).toBe(false);expect(threeProgrammeColours([...first,[184,65,217,255]])).toBe(true);});
+ it('5000条进度只保留待处理的最大值，授权、请求及接收回执仍按序执行',async()=>{const events:string[]=[],observed:NativeOutputCallbackObservation[]=[],progress:number[]=[];let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;}),input=fixture("for(let n=1;n<=5000;n++)process.send({type:'progress',frames:n});process.send({type:'programme',value:{type:'closed',id:'contract-connection',runtimeToken:'private-test-token',reason:'private-test-reason'}});process.send({type:'request',index:0});process.send({type:'accepted',index:0,sourceReady:true,frame:{}});process.send({type:'complete',acceptedFrames:1,encodedFrames:5000,helperPid:process.pid,helperEntry:'contract'});setTimeout(()=>process.disconnect(),250);");
+  const result=runLiveOutputAsync(input,new AbortController().signal,{next:async()=>{events.push('request');return null;},accepted:async()=>{events.push('accepted');},programme:async()=>{events.push('programme');},progress:async n=>{progress.push(n);if(progress.length===1)setTimeout(release,120);await gate;},observed:v=>{observed.push(v);}});expect((await result).encodedFrames).toBe(5000);expect(progress.at(-1)).toBe(5000);expect(progress.length).toBeLessThan(5000);expect(events).toEqual(['programme','request','accepted']);expect(Math.max(...observed.map(o=>o.queued))).toBeLessThan(12);expect(JSON.stringify(observed)).not.toMatch(/private-test/);
+ });
+ it('重复或回退的进度不重复执行数据库回执，最终进度仍可完成',async()=>{const values:number[]=[],input=fixture("for(const frames of [0,0,1,1,0,2,2,1,2])process.send({type:'progress',frames});process.send({type:'complete',acceptedFrames:2,encodedFrames:2,helperPid:process.pid,helperEntry:'contract'});setTimeout(()=>process.disconnect(),100);");await runLiveOutputAsync(input,new AbortController().signal,{next:async()=>null,accepted:async()=>{},progress:async n=>{values.push(n);}});expect(values.at(-1)).toBe(2);expect(values.every((v,i)=>!i||v>values[i-1])).toBe(true);});
+ it('非法进度会关闭自己的辅助进程，不交付假成功',async()=>{const input=fixture("process.send({type:'progress',frames:-1});");await expect(runLiveOutputAsync(input,new AbortController().signal,{next:async()=>null,accepted:async()=>{},progress:async()=>{throw new Error('invalid progress reached callback');}})).rejects.toThrow('连续编码进度无效');});
+});

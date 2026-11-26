@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T20/postgres-food/memory',file='docs/evidence/T20/postgres-food/backend-final-read-only-audit.json',hash=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const expected='f06610e18963f4c92f1f24d0df1fd4fd54e46abf875b2388fd04997a9e7a5083';assert.equal(hash(file),expected);
+const previous=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(previous.result,'PASS_FOOD_BACKEND_READ_ONLY_AUDIT');
+for(const[file,sha]of Object.entries(previous.sourceSHA256))assert.equal(hash(file),sha,file);
+for(const[file,sha]of Object.entries(previous.documentSHA256))assert.equal(hash(file),sha,file);
+assert.equal(hash(previous.manifest),previous.manifestSHA256);
+const registry=JSON.parse(fs.readFileSync('migrations/postgres/runtime.json','utf8'));assert.equal(registry.version,91);assert.equal(registry.migrations.at(-1).name,'094-native-dining-food.sql');
+fs.mkdirSync(root,{recursive:false});for(const file of ['PLAN.md','docs/backlog.json'])fs.copyFileSync(file,root+'/'+file.split('/').at(-1)+'.before',fs.constants.COPYFILE_EXCL);
+const result={result:'PASS_MEMORY_START_REVALIDATED',checkedAt:new Date().toISOString(),previousGoalTurnClassification:'progress',previousAudit:file,previousAuditSHA256:expected,previousManifest:previous.manifest,previousManifestSHA256:previous.manifestSHA256,currentSourcesVerified:Object.keys(previous.sourceSHA256).length,lastFrozenMigration:'094-native-dining-food.sql',currentRuntime:91,nextMigration:'095',mainWorkbenchRestarted:false,oldPrivateInstancesReactivated:false,oldSuccessfulFaultProducersRepeated:false,fullPlatformScopePreserved:true,goalStatus:'active',nextWork:['restaurant-purpose personal registration and restoration','enforced scene/store scope on reads/restore/results','explicit selected-fact import to preference drafts','consent withdrawal/source change/erasure invalidation and redaction','original deadline worker proof and enterprise compatibility','compiled complete preference UI','order and kitchen dependencies']};
+fs.writeFileSync(root+'/phase-start.json',JSON.stringify(result,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:result.result,sources:result.currentSourcesVerified,currentRuntime:91,next:'095',classification:'progress'}));

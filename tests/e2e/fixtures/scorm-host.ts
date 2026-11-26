@@ -1,0 +1,4 @@
+import {strictScormMock} from '../../../packages/test-fixtures/src/scorm.js';
+import type {ScormStandard} from '../../../packages/domain/src/scorm-runtime.js';
+const query=new URLSearchParams(location.search),standard:ScormStandard=query.get('standard')==='2004_4'?'2004_4':'1.2',key='digitalguide-test-lms:'+query.get('run')+':'+standard,initial=JSON.parse(sessionStorage.getItem(key)||'{}') as Record<string,string>,mock=strictScormMock(standard,{initial}),name=standard==='1.2'?'LMSCommit':'Commit',commit=mock.api[name];mock.api[name]=(...args:string[])=>{const result=commit(...args);if(result==='true')sessionStorage.setItem(key,JSON.stringify(mock.persisted));return result;};
+Reflect.set(window,'__courseMock',mock);Reflect.set(window,standard==='1.2'?'API':'API_1484_11',mock.api);Reflect.set(window,'__courseMockOnly',true);

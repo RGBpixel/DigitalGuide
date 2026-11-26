@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T20/postgres-hospitality/ui',parentFile='docs/evidence/T20/postgres-hospitality/verification.json',read=f=>JSON.parse(fs.readFileSync(f,'utf8')),hash=f=>createHash('sha256').update(fs.readFileSync(f)).digest('hex'),parent=read(parentFile);
+assert.equal(parent.result,'PASS_STAGED_NATIVE_DINING_SERVICE_BACKEND_RESTART');assert.equal(parent.runtime,115);
+for(const map of [parent.sourceSHA256,parent.documents,parent.evidenceSHA256])for(const[f,sha]of Object.entries(map))assert.equal(hash(f),sha,f);
+const registry=read('migrations/postgres/runtime.json');assert.equal(registry.version,115);for(const m of registry.migrations)assert.equal(hash('migrations/postgres/'+m.name),m.sha256,m.name);
+fs.mkdirSync(root,{recursive:false});const documents={};for(const[f,sha256]of Object.entries(parent.documents)){const snapshot=root+'/parent-documents/'+sha256+'/'+path.basename(f);fs.mkdirSync(path.dirname(snapshot),{recursive:true});fs.copyFileSync(f,snapshot,fs.constants.COPYFILE_EXCL);documents[f]={sha256,snapshot};}
+fs.writeFileSync(root+'/phase-start.json',JSON.stringify({result:'PASS_NATIVE_HOSPITALITY_UI_START_REVALIDATED',checkedAt:new Date().toISOString(),previousGoalTurnClassification:'progress',parentFile,parentSHA256:hash(parentFile),scope:parent.scope,documents,runtime:115,lastFrozenMigration:registry.migrations.at(-1).name,nextMigration:'119',sqliteMigration:'052',nextSqliteMigration:'053',mainHandle:'33223',mainRestarted:false,mainCutOver:false,earlierSealedRootsReactivated:false,oldSuccessfulFaultExpiryHistoryOrRefundProducersRepeated:false,requirements:['R-003','R-035','R-047','R-048','R-049','R-050','R-051','R-052'],work:['staff and guest dining service interfaces with current-scope confirmations','revocation and late-read privacy, mobile and restart GUI proof','separate service-request capability without implying completed aftercare or proactive reception','aftercare and proactive reception remain required, along with all full-platform G2 work'],goalStatus:'active'},null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({result:'PASS_NATIVE_HOSPITALITY_UI_START_REVALIDATED',runtime:115,nextMigration:'119',previousGoalTurnClassification:'progress',goal:'active'}));

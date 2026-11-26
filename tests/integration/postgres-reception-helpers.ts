@@ -1,0 +1,29 @@
+import {randomUUID} from 'node:crypto';
+import {expect} from 'vitest';
+import type {Asset,Profile,GuestSessionView,ReceptionSession,ReceptionTerminal,SceneApp,KnowledgeCollection,KnowledgeDocument,PresenceResult} from '@digitalguide/contracts';
+import {syntheticPng} from '@digitalguide/media';
+import {nativeReceptionCookieName} from '../../packages/postgres/src/runtime-reception.js';
+import {nativeOfficeHelpers} from './postgres-office-helpers.js';
+import type {NativeTestPerson} from './postgres-library-helpers.js';
+import type {nativeRuntimeFixture} from './postgres-runtime-helpers.js';
+// Only a staff /access issuance has that request key. A participant handoff
+// delivers a separate capability and must not invent a staff issuance key.
+export interface NativeGuest {id:string;cookie:string;headers:{cookie:string;'x-csrf-token':string};view:GuestSessionView;accessKey?:ReturnType<typeof randomUUID>}
+export function nativeReceptionHelpers(x:Awaited<ReturnType<typeof nativeRuntimeFixture>>){
+ const h=nativeOfficeHelpers(x);
+ async function terminal(p:NativeTestPerson){const venue=randomUUID();await x.owner(db=>db.query('INSERT INTO venues VALUES($1,$2,$3,$4,$5)',[venue,p.tenant,p.workspace,'原创虚构接待场所','Asia/Shanghai']));return h.good<ReceptionTerminal>(p,'/terminals',{venueId:venue,name:'原创虚构前台终端'});}
+ const session=(p:NativeTestPerson,terminal:ReceptionTerminal,extra:object={},key?:ReturnType<typeof randomUUID>)=>h.good<ReceptionSession>(p,'/sessions',{terminalId:terminal.id,...extra},key);
+ async function access(p:NativeTestPerson,row:ReceptionSession,key=randomUUID()):Promise<NativeGuest>{const response=await h.post(p,'/sessions/'+row.id+'/access',{},key);expect(response.statusCode,response.payload).toBe(200);const cookie=response.cookies.find(c=>c.name===nativeReceptionCookieName(x.result.api.runtimeId));expect(cookie).toBeDefined();expect(cookie!.httpOnly).toBe(true);expect(cookie!.sameSite).toBe('Strict');expect(cookie!.path).toBe('/api/v1/guest/sessions/'+row.id);const raw=cookie!.name+'='+encodeURIComponent(cookie!.value),loaded=await x.app.inject({url:'/api/v1/guest/sessions/'+row.id,headers:{cookie:raw}});expect(loaded.statusCode,loaded.payload).toBe(200);const view=loaded.json().data as GuestSessionView;return{id:row.id,cookie:raw,headers:{cookie:raw,'x-csrf-token':view.csrfToken},view,accessKey:key};}
+ async function guest(p:NativeTestPerson,extra:object={}){const t=await terminal(p),s=await session(p,t,extra);return{terminal:t,session:s,guest:await access(p,s)};}
+ const guestGet=(g:NativeGuest,path='')=>x.app.inject({url:'/api/v1/guest/sessions/'+g.id+path,headers:g.headers});
+ const guestPost=(g:NativeGuest,path:string,input:object,key=randomUUID())=>x.app.inject({method:'POST',url:'/api/v1/guest/sessions/'+g.id+path,payload:input,headers:{...g.headers,'idempotency-key':key}});
+ async function current(g:NativeGuest){const response=await guestGet(g);expect(response.statusCode,response.payload).toBe(200);return response.json().data as GuestSessionView;}
+ async function goodGuest<T=GuestSessionView>(g:NativeGuest,path:string,input:object,key?:ReturnType<typeof randomUUID>){const response=await guestPost(g,path,input,key);expect(response.statusCode,response.payload).toBe(200);return response.json().data as T;}
+ async function message(g:NativeGuest,text='您好，请介绍当前接待。',view=g.view,key?:ReturnType<typeof randomUUID>){return goodGuest(g,'/messages',{text,version:view.session.version,focusVersion:view.session.focusVersion,source:'typed'},key);}
+ async function control(g:NativeGuest,action:'stop'|'handoff'|'resume'|'end',view:GuestSessionView){return goodGuest(g,'/control',{action,version:view.session.version,focusVersion:view.session.focusVersion});}
+ const adminSession=(p:NativeTestPerson,id:string)=>h.get<ReceptionSession>(p,'/sessions/'+id);
+ const presence=(p:NativeTestPerson,t:ReceptionTerminal,trackId:string,type='entered',sessionId?:string)=>h.good<PresenceResult>(p,'/terminals/'+t.id+'/presence',{type,trackId,source:'mock_presence',...(sessionId?{sessionId}:{})});
+ async function profile(p:NativeTestPerson,expiresAt:string|null=null){const upload=await h.good<{uploadId:string}>(p,'/assets/uploads',{workspaceId:p.workspace,fileName:'原创合成接待参考.png',contentBase64:syntheticPng([24,108,76]).toString('base64')}),asset=await h.good<Asset>(p,'/assets',{uploadId:upload.uploadId,name:'原创合成接待参考',category:'avatar',expiresAt}),profile=await h.good<Profile>(p,'/profiles',{workspaceId:p.workspace,name:'原创虚构接待角色',avatarAssetId:asset.id,scenes:['reception']});return{asset,profile};}
+ async function scene(p:NativeTestPerson){const source=await profile(p),collection=await h.good<KnowledgeCollection>(p,'/knowledge/collections',{workspaceId:p.workspace,name:'原创公开来访知识',audience:'public',readerRoles:['admin','viewer'],scenes:['reception']}),created=await h.good<{id:string}>(p,'/knowledge/documents',{collectionId:collection.id,title:'原创公开开放时间',content:'公开展厅开放时间为上午九点，参观入口位于一层。',sourceLabel:'原创虚构接待手册',sourceUrl:null});const draft=await h.get<KnowledgeDocument>(p,'/knowledge/documents/'+created.id);await h.good(p,'/knowledge/documents/'+draft.id+'/publish',{version:draft.version,versionId:draft.versions[0].id,confirmed:true});const published=await h.get<KnowledgeDocument>(p,'/knowledge/documents/'+draft.id),createdApp=await h.good<{id:string}>(p,'/scene-apps',{workspaceId:p.workspace,profileId:source.profile.id,name:'原创公开接待应用',scene:'reception',channelKey:'native-reception-'+randomUUID().slice(0,8),audience:'public',welcomeText:'欢迎来到原创虚构场所。',collectionIds:[collection.id],tools:['knowledge.search']});const app=await h.get<SceneApp>(p,'/scene-apps/'+createdApp.id);return{...source,collection,document:published,app};}
+ return{...h,terminal,session,access,guest,guestGet,guestPost,current,goodGuest,message,control,adminSession,presence,profile,scene};
+}

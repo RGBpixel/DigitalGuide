@@ -1,0 +1,559 @@
+{
+  "version": 138,
+  "minimumPostgresMajor": 18,
+  "sourceBaselineSHA256": "b27f7cf0217bc3c96a334f7ae097592e9b5cc7e9cc244aa57b35e3d211cf2ced",
+  "migrations": [
+    {
+      "name": "004-native-runtime.sql",
+      "sha256": "72552587d8ee2272349fd491155c66534e5770d3235877cbf48643cf87d7c201"
+    },
+    {
+      "name": "005-native-tenant-lock.sql",
+      "sha256": "c9318f57cd2a97d304641a9b1ab65583277bacd27d5044d76a711386a57a193b"
+    },
+    {
+      "name": "006-native-assets.sql",
+      "sha256": "8182085787e23d75474e8a0a2c2218999b869096d6fe57e233c1820661845275"
+    },
+    {
+      "name": "007-native-library-clones.sql",
+      "sha256": "41c13d07459deeb1eef26081501f87866a2be6e4ca84c39baefa2671cb65c621"
+    },
+    {
+      "name": "008-native-library-reference-counts.sql",
+      "sha256": "e433149b49d0a971358a12300617e2919a0fb9d61d91f1c4260eea7ad02ad1c9"
+    },
+    {
+      "name": "009-native-studio.sql",
+      "sha256": "c8289f05c4fb959b172bf15be22267aeb7c5b38aef6d6e88874465c776947969"
+    },
+    {
+      "name": "010-native-studio-invalidation.sql",
+      "sha256": "d098efd32eba17ea22e8e371202e36a683e457581a47f58611597cdbacc7b6d3"
+    },
+    {
+      "name": "011-native-studio-media.sql",
+      "sha256": "1c6e786357b39bd22245c430a0271f8d2d7de92f533dbf30a67f91b4a9bd6f14"
+    },
+    {
+      "name": "012-native-media-reference-counts.sql",
+      "sha256": "63005fa90723077b99db4bfddc59199f511e4411b68542121fa4db103b6e6071"
+    },
+    {
+      "name": "013-native-project-packages.sql",
+      "sha256": "1ae2f26e2f6f62510db9bbe3d61dcf5876b8da137d00e7d728aa57b37f9343e0"
+    },
+    {
+      "name": "014-native-package-part-index.sql",
+      "sha256": "90625195a3c6e9a7c5473595c4aaf564af9a037ade4f4868b4e4c4a758268d61"
+    },
+    {
+      "name": "015-native-package-completion-audit.sql",
+      "sha256": "7e186fec78dfb9961c67788d478a04f1f188644df21ad889444b50bc5a897b09"
+    },
+    {
+      "name": "016-native-package-library-search.sql",
+      "sha256": "2c33c3c9426669593e29ba7c4686a3bce705880f6e29fd3c2e102b939ba6c1e5"
+    },
+    {
+      "name": "017-native-video-sources.sql",
+      "sha256": "af499dbf59ba0a159924b2b2e4d1e283c077db3029108ffdb174b63473719a3a"
+    },
+    {
+      "name": "018-native-document-imports.sql",
+      "sha256": "469c8a61be0ba1053ae9728f3a62445d1b120f115df0767cd8a6464af58817cb"
+    },
+    {
+      "name": "019-native-presentations.sql",
+      "sha256": "749e6abff4385b70edb704aafcb6bc318cbab6d0d3a3f3f3607bd50c818d5325"
+    },
+    {
+      "name": "020-native-presentation-answers.sql",
+      "sha256": "f5f545ce7b9caa73ff8bcb4a5a77dc8f747b0672563eccf9f8875acfcdd92078"
+    },
+    {
+      "name": "021-native-speech-authoring.sql",
+      "sha256": "282fd71e090c6df6fbc5b8c3745899e9973cd2d76ebd370690f711b5a987d356"
+    },
+    {
+      "name": "022-native-speech-claim-qualification.sql",
+      "sha256": "ddbded91982fdc497d32708b5e7f519ac59cd91d71969f0fff4a854ee4d21aa1"
+    },
+    {
+      "name": "023-native-package-stored-wav.sql",
+      "sha256": "17de136ea5e1eef1bddf4270c37df70d84eee257c43b881438e286ae5e581d3f"
+    },
+    {
+      "name": "024-native-pronunciation-brand-scope.sql",
+      "sha256": "b0cd7e869960f2e3cd8736760f41c90713faaffbd3ab2af50b11d9ecc93fed11"
+    },
+    {
+      "name": "025-native-content-authoring.sql",
+      "sha256": "2791241ccbf71668b23821aa480112123d95ca7780b749fa602cd386ff1ea28a"
+    },
+    {
+      "name": "026-native-file-transcriptions.sql",
+      "sha256": "17b29a5fab1b1234ff35764d4ae43e6712a458b450788e4ffb2c85c543eb07be"
+    },
+    {
+      "name": "027-native-media-processing.sql",
+      "sha256": "c82c7fa1c5aec4fbb100dd91116b72e04ce27d8d0c44ab7768c4fef32ca55c40"
+    },
+    {
+      "name": "028-native-processing-completion-audit.sql",
+      "sha256": "118ffcd0897fc5d6ab9b85817f1d5a7bcd3e98d7b8115fb5772e9f9508bbc8cc"
+    },
+    {
+      "name": "029-native-recordings.sql",
+      "sha256": "e2ec20170292c2d8474e3f92c1f69b87b7a00515c2f21f504bf01a6b52d87576"
+    },
+    {
+      "name": "030-native-recording-completion-fields.sql",
+      "sha256": "8b5656ae69175997783b2496f22cd06e1cf921de4a6512d285eb85c80f475946"
+    },
+    {
+      "name": "031-native-ae-sources.sql",
+      "sha256": "58389a1902185cc9705fa4e15d3fdb4acb0edf1d509b2122c7007de947e6d1c9"
+    },
+    {
+      "name": "032-native-ae-render-media.sql",
+      "sha256": "b1a6f91fccaa9cd940b48cee19a4059e7ab046d582c9c84b4d8b8ce659b99707"
+    },
+    {
+      "name": "033-native-ae-claim-qualification.sql",
+      "sha256": "3bac338028b35085647060497ef814d0133ed5727a01c56d8f3ec597997924b2"
+    },
+    {
+      "name": "034-native-team-reviews.sql",
+      "sha256": "12d6d2b39c2ba7ca4a37c2e223f63e892f53df5cf17a568b083037b835ae862a"
+    },
+    {
+      "name": "035-native-frame-reviews.sql",
+      "sha256": "60f37d846b9ae999d9ae4bb150ce735c573c90e5bdffa716eedffe3a5a8713bf"
+    },
+    {
+      "sha256": "1ddbbe359af081d14be938113d391f217bf8b530c0461b7024ddc16d2d7d23d1",
+      "name": "036-native-live-control.sql"
+    },
+    {
+      "name": "037-native-live-stop-cleanup.sql",
+      "sha256": "1f4a215b8bc2bad17b01cbad8eb14e354c05ba88029777b041b4e83c231a7692"
+    },
+    {
+      "name": "038-native-live-output.sql",
+      "sha256": "6f65680596adffb23e9e2887f55374171da1159c2c71cbdc8518a1dac44cd5f6"
+    },
+    {
+      "name": "039-native-live-output-cleanup.sql",
+      "sha256": "edbb7b97a65a24de9592297ed65b64b5022793b2d6a885145340fd420665ffad"
+    },
+    {
+      "name": "040-native-live-timeline-recording.sql",
+      "sha256": "949d5e6165ba807d190dddc53e3973a2059e0b6b58cc41bcf1e62cccce5be081"
+    },
+    {
+      "name": "041-native-public-knowledge-scenes.sql",
+      "sha256": "aee3bd6eb9f0fc1a9b9063b3ccf44e55b87720746696a73749bc592df3348f02"
+    },
+    {
+      "name": "042-native-live-system-speech.sql",
+      "sha256": "cb4df09724aaa4770b67e246bb788de758ba33e1f38f271abb722692e92054d0"
+    },
+    {
+      "name": "043-native-live-local-answers.sql",
+      "sha256": "aa251da822b331141405ef4acc5c11674569baa3eead31351a7031a4ea02b70b"
+    },
+    {
+      "name": "044-native-character-puppet.sql",
+      "sha256": "005348f9d835da82b5b5232b903329533c6fb203a5c324d208881683c9052059"
+    },
+    {
+      "name": "045-native-character-parent-reference.sql",
+      "sha256": "18dfd672ce935858d4ddb4bfdf8202ec9d54b1bf0f3286bdf0e651a08fda914d"
+    },
+    {
+      "name": "046-native-live-peers.sql",
+      "sha256": "111325898f97190fe94c0af5de93f85ec0befba94a4fefce133782dba036cf45"
+    },
+    {
+      "name": "047-native-peer-host-permission.sql",
+      "sha256": "825ae17d141e791c5c10505af054910f00bf600ec644c3800d80f63dfb00f8bd"
+    },
+    {
+      "name": "048-native-peer-lifecycle-ownership.sql",
+      "sha256": "8c7eb52dac4c6c431539cc3582252259506500b5e45fbb0c3ab917a562d3dcb6"
+    },
+    {
+      "name": "049-native-live-programme.sql",
+      "sha256": "6f5dd1be30722886100be264e3dad0013fc4b24eec4133af9952ffb706eb9084"
+    },
+    {
+      "name": "050-native-programme-capture-guards.sql",
+      "sha256": "acac02e0227f4233f98d5d17b2fd018b28b9a2b77d4d12c5a8aaed527bf976c6"
+    },
+    {
+      "name": "051-native-programme-peer-lease.sql",
+      "sha256": "9fd4dfad996c09a734c869199d667d6f0720e44b98ab646a364c82bdf06fbc22"
+    },
+    {
+      "name": "052-native-programme-capture-alias.sql",
+      "sha256": "028cc7c359f9ba4ef782067c93a1f49d956f1f004a022f576f07293c93f0960e"
+    },
+    {
+      "name": "053-native-character-production.sql",
+      "sha256": "74973ba4cc808f8ba283d2665cec3458cc792891476068ccda496002890b8cbb"
+    },
+    {
+      "name": "054-native-character-version-scope.sql",
+      "sha256": "d1c9a955b14ee0cf836345f82554f62378a8aff0979853b960a0f37aa2d61322"
+    },
+    {
+      "name": "055-native-studio-assistant.sql",
+      "sha256": "589a68e12b2d272f60be7027491ed9e79b9b561e577c521e2ab393c3c3a9c162"
+    },
+    {
+      "name": "056-native-assistant-source-projection.sql",
+      "sha256": "d87ca58b6979c088b734280d839ef8ae7529fc3dd24ba033e429a112c299563b"
+    },
+    {
+      "name": "057-native-assistant-deferred-bindings.sql",
+      "sha256": "fd4366582d0d25ccb6a2072ed2e427cc7547ad1633b445f16504ec7f3c700f33"
+    },
+    {
+      "name": "058-native-office.sql",
+      "sha256": "bd88bccb1021de1cdd51ad21fea4685f010136a17f96502a676868cf31b02549"
+    },
+    {
+      "name": "059-native-people.sql",
+      "sha256": "f75914546224fe0b97c21a006489f3107e31a4c9243ef056979814e13393d0ef"
+    },
+    {
+      "name": "060-native-people-greeting-alias.sql",
+      "sha256": "1080b58b8d78867786d2c53d83cdbbb10c919c1a04ab89442d291c655236dbfe"
+    },
+    {
+      "name": "061-native-reception.sql",
+      "sha256": "e1b1d9c56c765af40260f5f2f4c5664750989c11fae0704b74571e96bdc4e92f"
+    },
+    {
+      "name": "062-native-reception-profile-history.sql",
+      "sha256": "e44766189439f9caa22055b30362c2763203742c31658ef3888b47d38b66aafe"
+    },
+    {
+      "name": "063-native-guest-memory.sql",
+      "sha256": "f34790c9f9346ee6f52f8c21aebcb7cde662fe751c39f8623c9b5102e75f97f7"
+    },
+    {
+      "name": "064-native-reception-hosts.sql",
+      "sha256": "8379299ff6c2fdc1b560d4ae266e277c882d1fd202965af7d802add2aa6d2bf3"
+    },
+    {
+      "name": "065-native-visits.sql",
+      "sha256": "0bc0189195bcc0a6c95fa365cbaec091479099027ab1e3bf734927b19971a317"
+    },
+    {
+      "name": "066-native-visit-staff-scope.sql",
+      "sha256": "a747b8b179404cf8074cbab8f6732ee32e77f6f5b4888a7eab73e525b07980e4"
+    },
+    {
+      "name": "067-native-visit-delivery.sql",
+      "sha256": "6f7e608e5873a66f114f2a63e2c477da743dee3b8be71f2c64c07e40b663e0e0"
+    },
+    {
+      "name": "068-native-visit-privacy-replies.sql",
+      "sha256": "f0c5ca7c659a327f8f388f65c73a02b06ff11e1b02c4936470460ed30baaa993"
+    },
+    {
+      "name": "069-native-visit-private-receipts.sql",
+      "sha256": "ba40a157e113c842d4a86e5150282b1930473cfb64fc6f71adb47c0e3736eb7c"
+    },
+    {
+      "name": "070-native-visit-acceptance-boundaries.sql",
+      "sha256": "06a82ed6064d101c1d5139b43981acf373cd8ad479d7cd7c6fa1a8efa51fbf23"
+    },
+    {
+      "name": "071-native-visit-erase-input.sql",
+      "sha256": "213c0cc34c71a260ff36e3ffdcd9e8e04bf4697ea21eb1113a3dfbc6ded88e8a"
+    },
+    {
+      "name": "072-native-speaker-control.sql",
+      "sha256": "d873fcc6017558a4a1c3310e904f0e66ec61f0b667ee6317572a8443d8c47e23"
+    },
+    {
+      "name": "073-native-speaker-memory-order.sql",
+      "sha256": "e057a2eff50e4712e061631c166c39a88f18cdba4fb345730be111e7288546a4"
+    },
+    {
+      "name": "074-native-speaker-private-erasure.sql",
+      "sha256": "395e2f96615a3bcb915d39734f7bd75542a94637212339468fd218e3810e710f"
+    },
+    {
+      "name": "075-native-speaker-references.sql",
+      "sha256": "f1e4a94fc3b2e20c4dc28e30d38485c91b6303f5463e7625d920e59a395689b1"
+    },
+    {
+      "name": "076-native-speaker-ticket-trigger.sql",
+      "sha256": "f854eb575581161cc6ba5bad5afb6c560e0a2889229e3f19662841be375b2966"
+    },
+    {
+      "name": "077-native-speaker-known-grant-prelock.sql",
+      "sha256": "f11fc4da79f758bbde1fc85fd05c969b8af0a54bb191e164b26998c59a53f9e6"
+    },
+    {
+      "name": "078-native-speaker-events.sql",
+      "sha256": "b542d62062b2f04c85a981b055a9b33c4cf31f9b703ca62e01f702cb462ec768"
+    },
+    {
+      "name": "079-native-speaker-handoff.sql",
+      "sha256": "9027628b4c027f335220367fb1697e5c7067890fc061c73cd724d89dcc5bfcb0"
+    },
+    {
+      "name": "080-native-speaker-handoff-replay.sql",
+      "sha256": "d3147c102b9d960b17a22bdcd3b0a1f9ad83c26a9f538e2b81540b1ed39db4bd"
+    },
+    {
+      "name": "081-native-speaker-handoff-preparation-quota.sql",
+      "sha256": "e0a78db9373bd6e2686062e5faa6a87eb58d07cd4ea650b15c49b9fd7ab3723b"
+    },
+    {
+      "name": "082-native-vision.sql",
+      "sha256": "b3cc734a77ea27df231e983a7d20ea7d7aac511e0a333eab06cd620be522ee56"
+    },
+    {
+      "name": "083-native-vision-audit.sql",
+      "sha256": "cf8dd349c1bd6d526905f919d738590550b0ec0814485bf1acdb14de4e836963"
+    },
+    {
+      "name": "084-native-vision-expiry-playback.sql",
+      "sha256": "a87f35261b8963f9f813a1e4237038deca56a9d682e1907c783bf21dd2ff6f41"
+    },
+    {
+      "name": "085-native-restaurant-catalog.sql",
+      "sha256": "0fc1b57cbec28c8a1696cf7aa29d00d78bcb9c8d68b9ddc77eeeab5a52df5623"
+    },
+    {
+      "name": "086-native-restaurant-item-alias.sql",
+      "sha256": "442b1cd74c919f748ec85ffe8b618affdb60547a6861969a06b8cae1ba5337b4"
+    },
+    {
+      "name": "087-native-restaurant-sessions.sql",
+      "sha256": "8b7c24038dcbbc269015888cba0ca04e36b25520fb1d0edb06f5c0df8683747b"
+    },
+    {
+      "name": "088-native-restaurant-feature-scope.sql",
+      "sha256": "bfa89dabfd0b5b26c8a56a9e8d050b61740c386b467e23ef08d56dd9a9fdeb21"
+    },
+    {
+      "name": "089-native-restaurant-switch-target.sql",
+      "sha256": "d23049b001e326a8b4539fc4d129c8e0035f8b7a2d0b755a7ba07caa402add5a"
+    },
+    {
+      "name": "090-native-dining.sql",
+      "sha256": "ccf60e21ffecf6628be429497c485c698eee7912f0bc2257dc53724e2d88e279"
+    },
+    {
+      "name": "091-native-dining-clock.sql",
+      "sha256": "f12b4c06cb640b8dc65e372fc6d8625363741744e5d6268be23c142620150520"
+    },
+    {
+      "name": "092-native-dining-claim-owner.sql",
+      "sha256": "70c9c36cf79a1566fa94db68c942c88558518f9bb0493c7963d91fefcdcbd1ec"
+    },
+    {
+      "name": "093-native-dining-operation-variable.sql",
+      "sha256": "9990559ed93af5f3e84db7e8b607f2f1cfbdd5b733e57f6bb7471c3b71b36514"
+    },
+    {
+      "name": "094-native-dining-food.sql",
+      "sha256": "48bd5e2d82b89fb9a5888007be095cc155dca7e1ecf1dc9f8385883708d2fee5"
+    },
+    {
+      "name": "095-native-dining-memory-purpose.sql",
+      "sha256": "476d83e2d60825180fcab7e69e725f2228b2bdb99de38c945590a4a9e54aa451"
+    },
+    {
+      "name": "096-native-dining-memory-import.sql",
+      "sha256": "2640bc422cc03e5a957330b8ef3ea476a1ecef9e42f60b0553acc6b0784a8fd0"
+    },
+    {
+      "name": "097-native-restaurant-memory-directory.sql",
+      "sha256": "1a08239d6cf8b020b9f32d6df8ff9857d9989c7776bd80707480381d49a419ef"
+    },
+    {
+      "name": "098-native-order-reservations.sql",
+      "sha256": "3746a93bacc13fdcf0bf19db016a9dcd74ab6d8e240cd53b5f18f3a7689e6bcd"
+    },
+    {
+      "name": "099-native-order-config-scope.sql",
+      "sha256": "d96a1483b2c31ba98837f4f1230eb2c744fd170009393650b00f88cc73033128"
+    },
+    {
+      "name": "100-native-order-stock-item-version.sql",
+      "sha256": "519260e663f1cc58b79af30e31d4726587d62810089ff9c26f3ee3a9bde49d98"
+    },
+    {
+      "name": "101-native-order-catalog-provenance.sql",
+      "sha256": "35bf032a9b9bd2389c5dc1fb1b79a40fa77283a1b9023c8df67db01c3d580a5a"
+    },
+    {
+      "name": "102-native-order-aggregate-invariant.sql",
+      "sha256": "73c5251071b3924409cba6285337827ee81d3aca844b1dce4d79e3628b3d4555"
+    },
+    {
+      "name": "103-native-order-stock-capacity-input.sql",
+      "sha256": "b258723d69aadbd66081673b00ff9421c21e85dbf4100318ffc9d89293b854e8"
+    },
+    {
+      "name": "104-native-order-dispatch-receipts.sql",
+      "sha256": "ad0e2b293737b3c3a235adcf8eb677ea6f6ee9d2958f6669ed31e50f87f4a555"
+    },
+    {
+      "name": "105-native-order-pos-config-update.sql",
+      "sha256": "1bb79b98b4826b5ea0acce24c19ec24f02ce805edf24b4a5f4237b0eae3d90f1"
+    },
+    {
+      "name": "106-native-order-kitchen-control.sql",
+      "sha256": "5f7775cbc96702441aef086ff56240777c73d546c81872fb13ac206006a1ee55"
+    },
+    {
+      "name": "107-native-order-kitchen-final-alias.sql",
+      "sha256": "e0a1a1af0c765955cf59bfe6c1ec5142130b84a8b06d11485a3123c979fa594f"
+    },
+    {
+      "name": "108-native-bill-review-requests.sql",
+      "sha256": "2c2b8d78615e1f73a0889ca0937e173052283c0fc0bbe02b984782cc99dde1a5"
+    },
+    {
+      "name": "109-native-bill-historical-lock-order.sql",
+      "sha256": "ff2239ad0b0ddeb3ae562a33809ed8ef88a2761f48370b6bd0c8313794f837ad"
+    },
+    {
+      "name": "110-native-financial-transport.sql",
+      "sha256": "53dcc94a465e249635ad3979d8dedbdc0e93a4a9e457b5b75dc732ea0ee3c629"
+    },
+    {
+      "name": "111-native-financial-ignored-receipt-lease.sql",
+      "sha256": "c47707e7b0aa674f987037877d282c126e20ac988697e16f8798b895136aa7e8"
+    },
+    {
+      "name": "112-native-order-bill-reconciliation.sql",
+      "sha256": "d410a9a570f6040ca9b2981df447dfa62e003f0ab8742092ad133d4d1d5493ce"
+    },
+    {
+      "name": "113-native-order-settled-history.sql",
+      "sha256": "5f026073d347d8426b800207a6a09d7c378171a1a64d97c27bdec41016dd0447"
+    },
+    {
+      "name": "114-native-order-unsettled-party-index.sql",
+      "sha256": "a49f93e81cb33089711afa92cfc074866b7ca4290d4dbb36422b46b0a6c96f70"
+    },
+    {
+      "name": "115-native-bill-complete-party-history.sql",
+      "sha256": "b80453ae3cc8c978bfe97947742d884aa62e2a0932060d3b1a944cae9cdd0877"
+    },
+    {
+      "name": "116-native-restaurant-terminal-control.sql",
+      "sha256": "e5aa46ce4be9a01203f7567d557d3842e215e0778088d0cb58fd4e178de084e6"
+    },
+    {
+      "name": "117-native-dining-current-service-copy.sql",
+      "sha256": "bac0a3233640517f1c66bbcbc44a85f7fe5e877ffe56fece0e4774ffe8bc7ac4"
+    },
+    {
+      "name": "118-native-dining-services.sql",
+      "sha256": "7b7f5e4d25a7ffc5ca1957e1a04581d400738c1c6a47d801eff9d26f3ef70fc3"
+    },
+    {
+      "name": "119-native-dining-aftercare.sql",
+      "sha256": "819ab3dc9ac9ff05c9e05c387c756ef306a743b21116200dddbbdedd6be803c8"
+    },
+    {
+      "name": "120-native-aftercare-cipher-bounds.sql",
+      "sha256": "25460be77b99500ac169fb0b39c1d8a123078a6418c6877feac8f5ec6321c48c"
+    },
+    {
+      "name": "121-native-aftercare-history-selection.sql",
+      "sha256": "74bce64a6b711cb4796300c34480d5f18acfeeb3a8c44f7bb2e671d57ec392d8"
+    },
+    {
+      "name": "122-native-conversation-service-suggestions.sql",
+      "sha256": "dc4a5f88b01895a001414ca6c5fb2dae297cf0e95a29dd36a88a32063b268486"
+    },
+    {
+      "name": "123-native-conversation-service-source-shape.sql",
+      "sha256": "ed489eb4b5daa2ec6b91dda8aa5347ebf2662900e3b77eaf86a825f7c1a672b2"
+    },
+    {
+      "name": "124-native-proactive-purpose.sql",
+      "sha256": "d9ba1c0136e5b81ee06fcbe3f73f7f073c37db4caafbf65489a02392ea075903"
+    },
+    {
+      "name": "125-native-recovery-quarantine.sql",
+      "sha256": "d31b6432f8af7050bbc32706e1bf65a8e8097b14d5095330ae8cd1d5938a561f"
+    },
+    {
+      "name": "126-native-recovery-journal.sql",
+      "sha256": "9ef66eb3cd4cc8033801dc9b9d9ed96c6bdfefab790b9b77353c3b703470a9c4"
+    },
+    {
+      "name": "127-native-recovery-privacy.sql",
+      "sha256": "ee8fe090fec527bb472f7fe855aa840b11d631a6740df68105f4c81cd871f198"
+    },
+    {
+      "name": "128-native-recovery-authority.sql",
+      "sha256": "3c6c8e292aa69ba2beb0ba288d5a368ab26d854c175fc4d5da3aed3301803299"
+    },
+    {
+      "name": "129-native-operations-metrics.sql",
+      "sha256": "7c9f6334d84e1b14d459b74d7913f45f3ae67a315687582d38213be1305d2119"
+    },
+    {
+      "name": "130-native-enterprise-plans.sql",
+      "sha256": "7900f6ad7c877433bc98d6dd35342b7b7033dfab2607d92dbd8770c1b2c81e2c"
+    },
+    {
+      "name": "131-native-resource-shelf.sql",
+      "sha256": "bb856d06ce2bcbb376d1b1246a00b35d99045319e3e85278fe4ba2408c7980c2"
+    },
+    {
+      "name": "132-native-enterprise-identity.sql",
+      "sha256": "671f5d4c924d2871132eb02f7442e4f35390a7196cd4447be707e5c05c28390f"
+    },
+    {
+      "name": "133-native-enterprise-member-directory.sql",
+      "sha256": "c1a42a4d59efd65f88ad470e75d9ebabcec89a747dd2ea34e693b44af5c66325"
+    },
+    {
+      "name": "134-native-member-business-access.sql",
+      "sha256": "4ab01be4dd81f5df770321e7eac16a88304b732198e66e9c0aca3b0dc28cbec1"
+    },
+    {
+      "name": "135-native-enterprise-directory.sql",
+      "sha256": "2c5c8caee16d12fe613d1afb96eec864657006087aedc44ccf7bb5c7f5f5349c"
+    },
+    {
+      "name": "136-native-directory-group-access.sql",
+      "sha256": "3afa314ff7d674b1a46ec00263d63951e0e2c7e8bd9f64d4c633349ec8140cdd"
+    },
+    {
+      "name": "137-native-directory-profile-erasure.sql",
+      "sha256": "c27e87247e7ef500846ab3e58617123e950e62327fd4587fd7dce658309570eb"
+    },
+    {
+      "name": "138-native-directory-shared-identity-name.sql",
+      "sha256": "0a5bf4a5799639d4aa80d5e194c98143463ac3a749de953de16fabbf83efabda"
+    },
+    {
+      "name": "139-native-developer-access.sql",
+      "sha256": "acf71f1d7bb39b837d45f2de895cee867c6a000a7cab580e4706745df466421d"
+    },
+    {
+      "name": "140-native-developer-webhooks.sql",
+      "sha256": "fff0ce49c78c4d28b00e889d4a4f6a3bf15f1f3877f7a5697db45cc0194eb02e"
+    },
+    {
+      "name": "141-native-developer-studio.sql",
+      "sha256": "5acccdcf8f0095ca48217134a5b6d5e08fc35261269e92b7c2505ac8c2370f38"
+    }
+  ]
+}

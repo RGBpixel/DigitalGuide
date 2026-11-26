@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T20/postgres-food',file='docs/evidence/T20/postgres-dining/ui-final-corrected-audit.json',hash=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+assert.equal(hash(file),'1aab6aac33d0398645e65fb0279277267b9f0a4e0ca459ecced7e63aac7b66b6');
+const previous=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(previous.result,'PASS_CORRECTED_FINAL_READ_ONLY_AUDIT');assert.equal(previous.goalStatus,'active');
+for(const[file,sha]of Object.entries(previous.sourceSHA256))assert.equal(hash(file),sha,file);
+for(const[file,sha]of Object.entries(previous.documentSHA256))assert.equal(hash(file),sha,file);
+assert.equal(hash(previous.manifest),previous.manifestSHA256);
+const registry=JSON.parse(fs.readFileSync('migrations/postgres/runtime.json','utf8'));assert.equal(registry.version,90);assert.equal(registry.migrations.at(-1).name,'093-native-dining-operation-variable.sql');
+fs.mkdirSync(root,{recursive:false});for(const file of ['PLAN.md','docs/backlog.json'])fs.copyFileSync(file,root+'/'+file.split('/').at(-1)+'.before',fs.constants.COPYFILE_EXCL);
+const result={result:'PASS_FOOD_START_REVALIDATED',checkedAt:new Date().toISOString(),previousGoalTurnClassification:'progress',previousAudit:file,previousAuditSHA256:hash(file),previousManifest:previous.manifest,previousManifestSHA256:previous.manifestSHA256,currentSourcesVerified:Object.keys(previous.sourceSHA256).length,sourceSHA256:previous.sourceSHA256,currentRuntime:90,lastFrozenMigration:registry.migrations.at(-1).name,nextMigration:'094',mainWorkbenchRestarted:false,oldPrivateInstancesReactivated:false,oldSuccessfulFaultProducersRepeated:false,fullPlatformScopePreserved:true,goalStatus:'active',nextWork:['current meal preference draft and explicit confirmation','menu and dietary recommendation receipts','purpose-bound restored personal memory suggestions','price/stock quotes and order/kitchen flow','billing dependency and integration','compiled local UI and original deadline/restart evidence']};
+fs.writeFileSync(root+'/phase-start.json',JSON.stringify(result,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:result.result,sources:result.currentSourcesVerified,currentRuntime:90,nextMigration:'094',previousGoalTurnClassification:'progress'}));

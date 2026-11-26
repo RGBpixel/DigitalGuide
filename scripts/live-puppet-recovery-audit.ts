@@ -1,0 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {inspectLivePuppetFrames} from './live-puppet-frames.js';
+import {inspectRecoveredPuppetAudio} from './live-puppet-recovery-audio.js';
+const folder=process.argv[2];assert.ok(folder);const proof=JSON.parse(fs.readFileSync(path.join(folder,'proof.json'),'utf8'));assert.equal(proof.result,'PASS');const target=path.join(folder,'recovery-independent.json');assert.ok(!fs.existsSync(target));const file=path.join(folder,'actual-puppet-capture.mp4'),frames=await inspectLivePuppetFrames(proof.dataDir,proof.state.ids.output,file,path.join(folder,'recovered-mouth-frames'),['manual_speaking','paused'],2),audio=await inspectRecoveredPuppetAudio(proof.dataDir,proof.state.ids.output,proof.state.ids.manualSpeech,file,path.join(folder,'recovered-voice.pcm'));fs.writeFileSync(target,JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),scope:'Offline analysis of the already-captured original synthetic proof; authenticated source withdrawal checks remain separately enforced.',frames,audio,noBusinessMutation:true,noProcessRestart:true},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:'PASS',minimumGeneration:2,frameGroups:frames.groups,audioCorrelation:audio.best.correlation,audioLagSamples:audio.best.lagSamples}));

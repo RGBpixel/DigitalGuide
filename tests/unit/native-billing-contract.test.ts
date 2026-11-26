@@ -1,0 +1,10 @@
+import {describe,expect,it} from 'vitest';
+import {openapi,billReviewInput,financialConfirmInput,paymentConfigInput} from '@digitalguide/contracts';
+type Schema={oneOf?:Schema[];required?:string[];additionalProperties?:boolean;properties?:Record<string,unknown>};
+type Operation={requestBody?:{content:{'application/json':{schema:Schema}}}};
+const paths=openapi.paths as unknown as Record<string,{post?:Operation}>;
+describe('原生资金确认与旧接口的边界',()=>{
+ it('原生审阅、资金确认及后续动作同时要求当前发问人和就餐选择，旧接口仍拒绝额外原生字段',()=>{for(const path of ['/guest/sessions/{id}/dining/orders/{orderId}/billing/review','/guest/sessions/{id}/dining/billing/confirm','/guest/sessions/{id}/dining/financial-operations/{operationId}/actions']){const schema=paths[path].post!.requestBody!.content['application/json'].schema;expect(schema.oneOf).toHaveLength(2);expect(schema.oneOf![1].required).toEqual(expect.arrayContaining(['focusVersion','selectionVersion']));expect(schema.oneOf![0].properties).not.toHaveProperty('selectionVersion');expect(schema.oneOf!.every(s=>s.additionalProperties===false)).toBe(true);}});
+ it('账单审阅与确认拒绝客户自报金额、商户和币种',()=>{const quoteId='91a5eba0-016f-49b4-ae52-c7bd5e125abd';expect(billReviewInput.safeParse({orderVersion:1,billVersion:0,amountMinor:1}).success).toBe(false);for(const extra of [{amountMinor:1},{merchantId:'other'},{currency:'USD'}])expect(financialConfirmInput.safeParse({quoteId,confirmationToken:'a'.repeat(43),confirmed:true,...extra}).success).toBe(false);});
+ it('连接输入不接收客户端商户或密钥，也不放宽服务请求的旧分支',()=>{expect(paymentConfigInput.safeParse({version:0,providerId:'mock-payments',enabled:true,confirmed:true,merchantId:'custom'}).success).toBe(false);const schema=paths['/guest/sessions/{id}/dining/parties/{partyId}/services'].post!.requestBody!.content['application/json'].schema;expect(schema.oneOf).toHaveLength(2);expect(schema.oneOf![0].properties).not.toHaveProperty('partyVersion');expect(schema.oneOf![0].properties).not.toHaveProperty('selectionVersion');expect(schema.oneOf![1].required).toEqual(expect.arrayContaining(['partyVersion','focusVersion','selectionVersion']));});
+});

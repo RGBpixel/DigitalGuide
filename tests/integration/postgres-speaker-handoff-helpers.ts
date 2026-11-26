@@ -1,0 +1,22 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash,randomUUID} from 'node:crypto';
+import type {GuestSessionView} from '@digitalguide/contracts';
+import type {nativeRuntimeFixture} from './postgres-runtime-helpers.js';
+import type {NativeGuest} from './postgres-reception-helpers.js';
+import {nativeSpeakerEventHelpers} from './postgres-speaker-event-helpers.js';
+export function nativeSpeakerHandoffHelpers(x:Awaited<ReturnType<typeof nativeRuntimeFixture>>){
+ const migration='079-native-speaker-handoff.sql',sha256=createHash('sha256').update(fs.readFileSync('migrations/postgres/'+migration)).digest('hex'),freeze='docs/evidence/T20/postgres-speaker-focus/handoff-migration-frozen.json';if(fs.existsSync(freeze))assert.equal(JSON.parse(fs.readFileSync(freeze,'utf8')).sha256,sha256);else fs.writeFileSync(freeze,JSON.stringify({migration,sha256,firstKnownCommittedFixtureAt:new Date().toISOString(),privateFixture:x.cluster.root,appliedFilesMayNotBeEdited:true},null,2)+'\n',{flag:'wx'});
+ const correction='080-native-speaker-handoff-replay.sql',correctionHash=createHash('sha256').update(fs.readFileSync('migrations/postgres/'+correction)).digest('hex'),correctionFreeze='docs/evidence/T20/postgres-speaker-focus/handoff-correction-frozen.json';if(fs.existsSync(correctionFreeze))assert.equal(JSON.parse(fs.readFileSync(correctionFreeze,'utf8')).sha256,correctionHash);else fs.writeFileSync(correctionFreeze,JSON.stringify({migration:correction,sha256:correctionHash,firstKnownCommittedFixtureAt:new Date().toISOString(),privateFixture:x.cluster.root,appliedFilesMayNotBeEdited:true},null,2)+'\n',{flag:'wx'});
+ const quota='081-native-speaker-handoff-preparation-quota.sql',quotaHash=createHash('sha256').update(fs.readFileSync('migrations/postgres/'+quota)).digest('hex'),quotaFreeze='docs/evidence/T20/postgres-speaker-focus/handoff-quota-frozen.json';if(fs.existsSync(quotaFreeze))assert.equal(JSON.parse(fs.readFileSync(quotaFreeze,'utf8')).sha256,quotaHash);else fs.writeFileSync(quotaFreeze,JSON.stringify({migration:quota,sha256:quotaHash,firstKnownCommittedFixtureAt:new Date().toISOString(),privateFixture:x.cluster.root,appliedFilesMayNotBeEdited:true},null,2)+'\n',{flag:'wx'});
+ const h=nativeSpeakerEventHelpers(x);
+ const handoffInput=(g:NativeGuest)=>h.focusInput(g,{confirmed:true,nextVisitorConfirmed:true});
+ async function prepareHandoff(g:NativeGuest,input?:Awaited<ReturnType<typeof handoffInput>>,key=randomUUID()){
+  const body=input??await handoffInput(g),r=await h.guestPost(g,'/speaker-focus/handoff-intent',body,key);assert.equal(r.statusCode,200,r.payload);const data=r.json().data as{intentId:string;operationKey:string;expiresAt:string;state:string},cookie=r.cookies.find(c=>c.name.startsWith('dg_native_handoff_'));assert.ok(cookie);const extra=cookie.name+'='+encodeURIComponent(cookie.value);return{body,...data,headers:{...g.headers,cookie:g.cookie+'; '+extra},cookie:extra,response:r};
+ }
+ type Prepared=Awaited<ReturnType<typeof prepareHandoff>>;
+ const commitHandoff=(g:NativeGuest,p:Prepared,key=p.operationKey,app=x.app,body:object=p.body)=>app.inject({method:'POST',url:'/api/v1/guest/sessions/'+g.id+'/speaker-focus/handoff',headers:{...p.headers,'idempotency-key':key},payload:body});
+ async function claimHandoff(r:Awaited<ReturnType<typeof commitHandoff>>):Promise<NativeGuest>{assert.equal(r.statusCode,200,r.payload);const id=r.json().data.sessionId as string,c=r.cookies.find(c=>c.name.startsWith('dg_native_guest_')&&c.value.startsWith('RG1.'));assert.ok(c);const cookie=c.name+'='+encodeURIComponent(c.value),current=await x.app.inject({url:'/api/v1/guest/sessions/'+id,headers:{cookie}});assert.equal(current.statusCode,200,current.payload);const view=current.json().data as GuestSessionView;return{id,cookie,headers:{cookie,'x-csrf-token':view.csrfToken},view};}
+ const handoffCount=(g:NativeGuest)=>x.owner(async db=>({intents:(await db.query('SELECT id FROM _dg_native_speaker_handoffs WHERE session_id=$1',[g.id])).rows.length,next:(await db.query('SELECT next_session_id FROM _dg_native_speaker_handoffs WHERE session_id=$1 AND next_session_id IS NOT NULL',[g.id])).rows.length,sessions:(await db.query('SELECT id FROM reception_sessions WHERE terminal_id=(SELECT terminal_id FROM reception_sessions WHERE id=$1)',[g.id])).rows.length}));
+ return{...h,handoffInput,prepareHandoff,commitHandoff,claimHandoff,handoffCount};
+}

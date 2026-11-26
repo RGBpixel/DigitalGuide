@@ -1,0 +1,20 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const read=file=>fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n'),hash=value=>createHash('sha256').update(value).digest('hex'),replace=(value,before,after)=>{assert.equal(value.split(before).length,2,before);return value.replace(before,after);};
+const extract=(file,name)=>{const value=read(file),start=value.indexOf('FUNCTION '+name+'('),end=value.indexOf('$dg$;',start);assert.ok(start>=0&&end>start,name);return'CREATE OR REPLACE '+value.slice(start,end+6)+'\n';};
+const root='docs/evidence/T20/postgres-orders',name='098-native-order-reservations.sql',file='migrations/postgres/'+name,manifestFile='migrations/postgres/runtime.json',manifest=JSON.parse(read(manifestFile)),regenerate=process.argv.includes('--unapplied-draft');
+assert.equal(fs.existsSync(root+'/migration-frozen.json'),false,'Committed migrations cannot be regenerated');
+assert.equal(manifest.version,regenerate?95:94);assert.equal(manifest.migrations.at(-1).name,regenerate?name:'097-native-restaurant-memory-directory.sql');
+for(const m of manifest.migrations)assert.equal(hash(fs.readFileSync('migrations/postgres/'+m.name)),m.sha256,m.name);
+if(regenerate){const bytes=fs.readFileSync(file),sha256=hash(bytes),archive=root+'/unapplied-drafts/'+sha256+'/'+name;fs.mkdirSync(path.dirname(archive),{recursive:true});if(!fs.existsSync(archive))fs.writeFileSync(archive,bytes,{flag:'wx'});}else assert.equal(fs.existsSync(file),false);
+let sql='-- Native local/mock order drafts, bounded quotes and atomic unsent inventory.\n';
+for(const part of ['base','quotes','inventory','commands','views','guards','final'])sql+='\n'+read('scripts/native-order-'+part+'.sql');
+let catalog=extract('migrations/postgres/090-native-dining.sql','dg_native_restaurant_record_guard');
+catalog=replace(catalog,"BEGIN\n IF TG_OP='UPDATE'", "BEGIN\n IF TG_OP='UPDATE' AND dg_native_order_catalog_guard(TG_TABLE_NAME,j,previous) THEN RETURN NEW;END IF;\n IF TG_OP='UPDATE'");
+catalog=replace(catalog,"(j->>'order_counter')::bigint<>0","(j->>'order_counter')::numeric NOT BETWEEN 0 AND 9007199254740991");sql+='\n'+catalog;
+let dining=extract('migrations/postgres/093-native-dining-operation-variable.sql','dg_native_dining_apply');dining=replace(dining,"IF EXISTS(SELECT 1 FROM restaurant_orders WHERE party_id=p.id) THEN PERFORM dg_native_dining_error('FINANCIAL_PENDING');END IF;","IF NOT dg_native_order_empty_finishable(p.id) THEN PERFORM dg_native_dining_error('FINANCIAL_PENDING');END IF;");sql+='\n'+dining;
+sql+="\nDO $order_acl$ DECLARE f record;BEGIN FOR f IN SELECT p.oid::regprocedure signature FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=current_schema() AND p.proname LIKE 'dg_native_order_%' LOOP EXECUTE 'REVOKE ALL ON FUNCTION '||f.signature||' FROM PUBLIC';END LOOP;END;$order_acl$;\n";
+if(regenerate){fs.writeFileSync(file,sql);manifest.migrations.at(-1).sha256=hash(sql);}else{fs.writeFileSync(file,sql,{flag:'wx'});manifest.version=95;manifest.migrations.push({name,sha256:hash(sql)});for(const sourceFile of ['packages/postgres/src/runtime-database.ts','tests/unit/postgres-runtime.test.ts']){let value=read(sourceFile);value=replace(value,"'097-native-restaurant-memory-directory.sql']","'097-native-restaurant-memory-directory.sql','"+name+"']");if(sourceFile.includes('runtime-database'))value=replace(value,'manifest.version!==94','manifest.version!==95');fs.writeFileSync(sourceFile,value);}}
+fs.writeFileSync(manifestFile,JSON.stringify(manifest,null,2)+'\n');console.log(JSON.stringify({migration:name,sha256:hash(sql),runtime:95,applied:false}));

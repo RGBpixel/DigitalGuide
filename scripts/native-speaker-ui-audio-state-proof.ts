@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {expect} from '@playwright/test';
+import type {GuestSessionView,ReceptionSession,ReceptionTerminal} from '../packages/contracts/src/index.js';
+import {NativeContentProofRuntime} from './postgres-content-proof-runtime.js';
+import {SpeakerUiProof} from './native-speaker-ui-browser-helpers.js';
+const label=process.argv[2],prior=process.argv[3];assert.match(label,/^[a-z][a-z0-9-]+$/);assert.ok(prior);process.env.NATIVE_SPEAKER_UI_PREVIEW='0';
+const c=await NativeContentProofRuntime.resume('docs/evidence/T20/postgres-speaker-focus/'+label,prior),u=new SpeakerUiProof(c,label);let failure:unknown;
+try{
+ await u.open();u.state.phase='原创未配置声音场景';const t=await c.good<ReceptionTerminal>('/terminals',{venueId:u.venueId,name:'原创未配置声音场景'}),s=await c.good<ReceptionSession>('/sessions',{terminalId:t.id}),key=randomUUID(),access=await c.http('/api/v1/sessions/'+s.id+'/access',{},c.apiA,{...c.headers,'idempotency-key':key});assert.equal(access.status,200);assert.ok(access.cookie);const ctx=await u.h.context(access.cookie.split(';')[0],s.id),g=await u.h.capture(ctx,s.id,key),p=await u.h.page(ctx);u.state.guests['未配置声音']={id:g.id,grantId:g.grantId,accessKey:key,terminalId:t.id};u.retain();await p.goto('/terminal/'+g.id);await expect(p.getByRole('heading',{name:'您好，欢迎来访',exact:true})).toBeVisible();const empty=await u.h.get<GuestSessionView>(g);assert.deepEqual(empty.audio,{state:'not_configured',focus:'unlocked'});await expect(u.panel(p).getByText(/此场景尚未配置可用的专注对话服务/)).toBeVisible();await expect(p.getByRole('button',{name:'开始专注对话',exact:true})).toHaveCount(0);await u.shot(p,'unconfigured-native-audio');await u.end(p,g);
+ const configured=await u.fresh('原创当前音频状态编译核对');await u.start(configured.p,configured.g);await u.clear(configured.p,configured.g);const mock=await u.h.get<GuestSessionView>(configured.g);assert.deepEqual(mock.audio,{state:'mock_focus',focus:'locked'});assert.equal(mock.features?.speakerFocusPreview,false);u.record('ui_current_audio_hint_distinguishes_unconfigured_service_and_explicit_mock_focus',{unconfiguredSessionId:g.id,configuredSessionId:configured.g.id,unconfiguredAudio:empty.audio,configuredAudio:mock.audio,defaultUi:true,realRecognition:false});await u.end(configured.p,configured.g);
+ for(const[role,file]of [['api',c.apiPath],['worker',c.workerPath]]){const checked=await c.cli('final-check-'+role,['check','--config-file',file,'--role',role]);assert.equal(checked.code,0);c.add('current_compiled_'+role+'_role_check_after_audio_hint_correction');}
+}catch(error){failure=error;}finally{await u.finish(failure);}

@@ -1,0 +1,22 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+const root='docs/evidence/T20/postgres-studio-assistant',label=process.argv[2],mode=process.argv[3];assert.match(label,/^[a-z][a-z0-9-]+$/);
+const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>['node_modules','.git'].includes(e.name)?[]:e.isDirectory()?walk(dir+'/'+e.name):[dir+'/'+e.name]);
+const files=[...['apps','packages','tests'].flatMap(walk).filter(f=>/\.tsx?$/.test(f)),...walk('migrations').filter(f=>/\.(sql|json)$/.test(f)),...fs.readdirSync('scripts').filter(f=>f.endsWith('.ts')||/^native-studio-assistant-.*\.mjs$/.test(f)).map(f=>'scripts/'+f),'scripts/build.mjs','scripts/build-docs.mjs','scripts/check-docs.mjs'],bindings=[];
+for(const file of new Set(files)){const bytes=fs.readFileSync(file),sha256=createHash('sha256').update(bytes).digest('hex'),bound=root+'/sources/'+sha256+'/'+path.basename(file);fs.mkdirSync(path.dirname(bound),{recursive:true});if(!fs.existsSync(bound))try{fs.writeFileSync(bound,bytes,{flag:'wx'});}catch(e){if(e.code!=='EEXIST')throw e;}let verified=false;for(let n=0;n<40;n++){try{verified=createHash('sha256').update(fs.readFileSync(bound)).digest('hex')===sha256;if(verified)break;}catch(e){if(!['EBUSY','EPERM','ENOENT'].includes(e.code))throw e;}await new Promise(r=>setTimeout(r,25));}assert.equal(verified,true,bound);bindings.push({file,sha256,bound});}
+const tests=names=>['node_modules/vitest/vitest.mjs','run',...names,'--reporter=default','--reporter=json','--outputFile='+root+'/'+label+'.json',...process.argv.slice(4)];
+const commands={typecheck:['node_modules/typescript/bin/tsc','--noEmit'],lint:['node_modules/eslint/bin/eslint.js','apps','packages','tests','scripts/*.ts'],build:['scripts/build.mjs'],init:['--import','tsx','scripts/native-studio-assistant-init.ts',label],target:tests(['tests/integration/postgres-studio-assistant.test.ts','tests/integration/postgres-assistant-interpretations.test.ts']),related:tests(['tests/integration/postgres-characters.test.ts','tests/integration/characters.test.ts','tests/unit/character-media.test.ts','tests/unit/postgres-runtime.test.ts']),proof:['--import','tsx','scripts/native-studio-assistant-proof.ts',label,...process.argv.slice(4)],'docs-build':['scripts/build-docs.mjs'],'docs-check':['scripts/check-docs.mjs'],'api-spec':['--import','tsx','scripts/export-openapi.ts']};
+commands['cross-studio']=tests(['tests/integration/postgres-studio.test.ts']);
+commands['target-jobs']=tests(['tests/integration/postgres-studio-assistant.test.ts']);
+commands['related-character']=tests(['tests/integration/postgres-characters.test.ts']);
+commands['cross-assets']=tests(['tests/integration/postgres-library.test.ts','tests/integration/postgres-media.test.ts']);
+commands.cross=tests(['tests/integration/postgres-library.test.ts','tests/integration/postgres-media.test.ts','tests/integration/postgres-studio.test.ts']);
+commands.related=tests(['tests/integration/studio-assistant.test.ts','tests/integration/studio-assistant-guards.test.ts','tests/integration/assistant-interpretations.test.ts','tests/unit/studio-assistant.test.ts','tests/unit/local-editor.test.ts','tests/unit/postgres-runtime.test.ts']);
+commands['cross-voice']=tests(['tests/integration/postgres-speech-guards.test.ts','tests/integration/postgres-content-writing.test.ts']);
+commands.observe=['--import','tsx','scripts/native-studio-assistant-observe.ts',label,...process.argv.slice(4)];
+commands['lint-harness']=['node_modules/eslint/bin/eslint.js','scripts/native-studio-assistant-proof.ts','scripts/native-studio-assistant-observe.ts'];
+const args=commands[mode];assert.ok(args,'Unknown check mode');const startedAt=new Date().toISOString(),fd=fs.openSync(root+'/'+label+'.log','wx'),child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore',fd,fd]}),exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});fs.closeSync(fd);
+fs.writeFileSync(root+'/'+label+'-command.json',JSON.stringify({result:exitCode===0?'PASS':'FAIL',command:[process.execPath,...args],startedAt,finishedAt:new Date().toISOString(),exitCode,bindings,sourceSHA256:Object.fromEntries(bindings.map(b=>[b.file,b.sha256]))},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({label,mode,exitCode}));process.exitCode=exitCode;

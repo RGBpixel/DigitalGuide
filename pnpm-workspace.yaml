@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+storeDir: .pnpm-store
+enableGlobalVirtualStore: false
+nodeLinker: hoisted
+injectWorkspacePackages: false
+saveExact: true
+engineStrict: true
+registry: https://registry.npmjs.org/
+allowBuilds:
+  esbuild: true
+  protobufjs: false

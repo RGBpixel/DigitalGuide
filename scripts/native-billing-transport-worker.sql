@@ -1,0 +1,48 @@
+ALTER TABLE _dg_native_bill_worker_leases ADD COLUMN source_action_id text REFERENCES _dg_native_bill_action_origins(action_id);
+
+CREATE FUNCTION dg_native_bill_worker_claim() RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $dg$
+DECLARE candidate record;operation restaurant_financial_operations%ROWTYPE;action_value text;created text;mode_value text;reason_value text;lease_value text;expires text;source_action _dg_native_bill_action_origins%ROWTYPE;interrupted boolean;
+BEGIN
+ PERFORM dg_native_reception_runtime(true);
+ FOR candidate IN SELECT financial.id FROM restaurant_financial_operations financial JOIN _dg_native_bill_operation_origins origin ON origin.operation_id=financial.id WHERE financial.status='queued' AND financial.send_attempts=0 OR financial.status IN('submitting','pending','unknown','needs_attention') AND(financial.lease_token IS NOT NULL AND financial.lease_until<=dg_native_dining_now() OR financial.lease_token IS NULL AND(financial.next_action IS NOT NULL OR financial.kind='refund' AND financial.status='pending' AND financial.lookups<3 AND(financial.last_lookup_at IS NULL OR financial.last_lookup_at<=dg_native_people_iso(clock_timestamp()-interval '1 second')))) ORDER BY financial.created_at,financial.id LIMIT 25 LOOP
+  PERFORM dg_native_bill_transport_lock(candidate.id);SELECT * INTO operation FROM restaurant_financial_operations WHERE id=candidate.id;IF operation.lease_token IS NOT NULL AND operation.lease_until>dg_native_dining_now() OR operation.status IN('succeeded','failed','expired','cancelled','stale') THEN CONTINUE;END IF;
+  interrupted:=operation.lease_token IS NOT NULL;source_action:=NULL;
+  IF operation.status='queued' AND operation.send_attempts=0 THEN
+   reason_value:=dg_native_bill_quote_reason(operation.quote_id,NULL,true);IF reason_value IS NOT NULL THEN
+    action_value:=dg_native_bill_transport_action(operation.id,'bill_stale');SELECT created_at INTO created FROM _dg_native_dining_actions WHERE id=action_value;PERFORM dg_native_dining_effect(action_value,'restaurant_financial_operations',operation.id);UPDATE restaurant_financial_operations SET status='stale',error_code='FINANCIAL_SOURCE_CHANGED',error_message='原审阅期限、人员授权、会话、金额或连接已变化，未发送请求已停止，请重新核对。',version=version+1,updated_at=created WHERE id=operation.id;PERFORM dg_native_bill_refresh(action_value,operation.bill_id);PERFORM dg_native_bill_event(action_value,operation.bill_id,operation.id,'发送前原来源失效，未发送资金请求已停止。');CONTINUE;
+   END IF;mode_value:='send';
+  ELSIF operation.send_attempts=1 AND operation.status IN('submitting','pending','unknown','needs_attention') THEN
+   mode_value:=CASE WHEN interrupted THEN 'query' ELSE coalesce(operation.next_action,'query') END;
+   IF NOT interrupted AND operation.next_action IS NOT NULL THEN SELECT * INTO source_action FROM _dg_native_bill_action_origins WHERE operation_id=operation.id AND mode=mode_value ORDER BY created_at DESC,action_id DESC LIMIT 1;END IF;
+   IF mode_value IN('close','simulate') THEN
+    reason_value:=CASE WHEN source_action.action_id IS NULL THEN '缺少原明确动作。' ELSE dg_native_bill_action_reason(operation.id,mode_value,source_action.actor_meta) END;
+    IF reason_value IS NOT NULL THEN action_value:=dg_native_bill_transport_action(operation.id,'bill_action_blocked');SELECT created_at INTO created FROM _dg_native_dining_actions WHERE id=action_value;PERFORM dg_native_dining_effect(action_value,'restaurant_financial_operations',operation.id);UPDATE restaurant_financial_operations SET next_action=NULL,error_code='FINANCIAL_ACTION_BLOCKED',error_message='原明确动作的权限、会话、连接或金额已变化，未执行新的付款或关闭，请核对原结果。',version=version+1,updated_at=created WHERE id=operation.id;PERFORM dg_native_bill_refresh(action_value,operation.bill_id);PERFORM dg_native_bill_event(action_value,operation.bill_id,operation.id,'原明确动作来源失效，未执行新的资金动作。');CONTINUE;END IF;
+   END IF;
+  ELSE CONTINUE;END IF;
+  action_value:=dg_native_bill_transport_action(operation.id,'bill_'||mode_value);SELECT created_at INTO created FROM _dg_native_dining_actions WHERE id=action_value;lease_value:=gen_random_uuid()::text;expires:=dg_native_people_iso(created::timestamptz+interval '15 seconds');
+  PERFORM dg_native_dining_effect(action_value,'restaurant_financial_operations',operation.id);UPDATE restaurant_financial_operations SET status=CASE WHEN mode_value='send' THEN 'submitting' WHEN interrupted AND status<>'needs_attention' THEN 'unknown' ELSE status END,send_attempts=send_attempts+CASE WHEN mode_value='send' THEN 1 ELSE 0 END,simulate_attempts=simulate_attempts+CASE WHEN mode_value='simulate' THEN 1 ELSE 0 END,lookups=lookups+CASE WHEN mode_value='query' THEN 1 ELSE 0 END,last_lookup_at=CASE WHEN mode_value='query' THEN created ELSE last_lookup_at END,next_action=NULL,lease_action=mode_value,lease_token=lease_value,lease_until=expires,version=version+1,updated_at=created WHERE id=operation.id;
+  INSERT INTO _dg_native_bill_worker_leases VALUES(lease_value,operation.id,mode_value,operation.request_hash,(SELECT runtime_id FROM _dg_native_runtime_control WHERE id=1),action_value,created,expires,source_action.action_id);PERFORM dg_native_bill_refresh(action_value,operation.bill_id);PERFORM dg_native_bill_event(action_value,operation.bill_id,operation.id,CASE WHEN mode_value='send' THEN '已持久登记首次资金请求尝试，尚未核实付款或退款。' WHEN interrupted THEN '原租约已到期，仅查询同一请求；不重复付款、退款或关闭动作。' ELSE '沿原编号核对已明确请求的资金动作。' END);
+  RETURN jsonb_build_object('operationId',operation.id,'leaseToken',lease_value,'mode',mode_value,'expiresAt',expires,'requestHash',operation.request_hash);
+ END LOOP;RETURN NULL;
+END;$dg$;
+
+CREATE FUNCTION dg_native_bill_worker_context(target text,lease_value text,execute_value boolean DEFAULT false) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $dg$
+DECLARE operation restaurant_financial_operations%ROWTYPE;lease _dg_native_bill_worker_leases%ROWTYPE;source_action _dg_native_bill_action_origins%ROWTYPE;reason_value text;
+BEGIN
+ PERFORM dg_native_reception_runtime(true);SELECT * INTO operation FROM restaurant_financial_operations WHERE id=target;SELECT * INTO lease FROM _dg_native_bill_worker_leases WHERE lease_token=lease_value AND operation_id=target;
+ IF operation.id IS NULL OR operation.lease_token IS DISTINCT FROM lease_value OR lease.lease_token IS NULL OR operation.lease_until<=dg_native_dining_now() OR operation.lease_until IS DISTINCT FROM lease.expires_at OR operation.lease_action IS DISTINCT FROM lease.mode OR lease.runtime_id<>(SELECT runtime_id FROM _dg_native_runtime_control WHERE id=1) OR lease.request_hash<>operation.request_hash OR operation.request_hash<>dg_native_office_hash(operation.request_payload::jsonb) OR operation.send_attempts<>1 OR operation.provider_id<>'mock-payments' OR operation.simulated<>1 OR operation.status NOT IN('submitting','pending','unknown','needs_attention') THEN PERFORM dg_native_bill_error('FINANCIAL_WORKER_LEASE');END IF;
+ IF execute_value THEN
+  IF lease.mode='send' THEN reason_value:=dg_native_bill_quote_reason(operation.quote_id,NULL,true);
+  ELSIF lease.mode IN('close','simulate') THEN SELECT * INTO source_action FROM _dg_native_bill_action_origins WHERE action_id=lease.source_action_id;reason_value:=CASE WHEN source_action.action_id IS NULL THEN '原明确动作缺失。' ELSE dg_native_bill_action_reason(operation.id,lease.mode,source_action.actor_meta,true) END;END IF;
+  IF reason_value IS NOT NULL THEN PERFORM dg_native_bill_error('FINANCIAL_SOURCE_EXPIRED');END IF;
+ END IF;
+ RETURN jsonb_build_object('operationId',operation.id,'leaseToken',lease_value,'mode',lease.mode,'expiresAt',lease.expires_at,'requestHash',lease.request_hash,'request',operation.request_payload::jsonb,'scenario',operation.config_snapshot::jsonb->>'scenario','sourceExpiresAt',CASE WHEN lease.mode='send' THEN(SELECT expires_at FROM restaurant_financial_quotes WHERE id=operation.quote_id) ELSE lease.expires_at END);
+END;$dg$;
+
+CREATE FUNCTION dg_native_bill_worker_complete(target text,lease_value text,receipt jsonb DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path FROM CURRENT AS $dg$
+DECLARE operation restaurant_financial_operations%ROWTYPE;lease _dg_native_bill_worker_leases%ROWTYPE;action_value text;created text;result_value jsonb;
+BEGIN
+ PERFORM dg_native_reception_runtime(true);PERFORM dg_native_bill_transport_lock(target);PERFORM dg_native_bill_worker_context(target,lease_value,false);SELECT * INTO operation FROM restaurant_financial_operations WHERE id=target;
+ IF receipt IS NOT NULL THEN RETURN dg_native_bill_receipt_apply(gen_random_uuid()::text,receipt,'worker');END IF;
+ action_value:=dg_native_bill_transport_action(target,'bill_unknown');SELECT created_at INTO created FROM _dg_native_dining_actions WHERE id=action_value;PERFORM dg_native_dining_effect(action_value,'restaurant_financial_operations',target);UPDATE restaurant_financial_operations SET status=CASE WHEN error_code='FINANCIAL_RECONCILIATION_REQUIRED' THEN 'needs_attention' ELSE 'unknown' END,lease_token=NULL,lease_until=NULL,lease_action=NULL,next_action=NULL,error_code=CASE WHEN error_code='FINANCIAL_RECONCILIATION_REQUIRED' THEN error_code ELSE 'FINANCIAL_RESULT_UNKNOWN' END,error_message=CASE WHEN error_code='FINANCIAL_RECONCILIATION_REQUIRED' THEN error_message ELSE '通信结果尚未核实，保留原编号和退款额度，仅查询原请求，不重复资金动作。' END,version=version+1,updated_at=created WHERE id=target;PERFORM dg_native_bill_refresh(action_value,operation.bill_id);PERFORM dg_native_bill_event(action_value,operation.bill_id,target,'原资金请求结果未知，保留原请求与额度，仅允许核对。');RETURN jsonb_build_object('duplicate',false,'applied',false,'attention',coalesce(operation.error_code='FINANCIAL_RECONCILIATION_REQUIRED',false));
+END;$dg$;

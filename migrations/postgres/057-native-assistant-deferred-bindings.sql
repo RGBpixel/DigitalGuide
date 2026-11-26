@@ -1,0 +1,17 @@
+-- Applied055/056 are frozen. A final state must have all its matching ledgers,
+-- even when a role issues SQL directly or a transaction stops between writes.
+CREATE FUNCTION dg_native_assistant_final_binding() RETURNS trigger LANGUAGE plpgsql SET search_path FROM CURRENT AS $dg$
+DECLARE target text;row_value jsonb:=to_jsonb(NEW);s studio_assistant_sessions%ROWTYPE;i _dg_native_assistant_sources%ROWTYPE;
+BEGIN
+ target:=CASE WHEN TG_TABLE_NAME='studio_assistant_sessions' THEN row_value->>'id' ELSE row_value->>'session_id' END;
+ SELECT * INTO s FROM studio_assistant_sessions WHERE id=target;SELECT * INTO i FROM _dg_native_assistant_sources WHERE session_id=target;
+ IF s.id IS NULL OR i.session_id IS NULL OR i.snapshot::jsonb->'document' IS DISTINCT FROM s.base_document::jsonb OR dg_native_assistant_digest(i.snapshot::jsonb)<>s.source_hash OR dg_native_assistant_digest(s.base_document::jsonb)<>s.base_document_hash THEN RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='Assistant requires its exact immutable source ledger at commit';END IF;
+ IF s.current_turn_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM studio_assistant_turns t WHERE t.id=s.current_turn_id AND t.session_id=s.id) OR s.current_generation_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM studio_assistant_generations g WHERE g.id=s.current_generation_id AND g.session_id=s.id AND g.turn_id=s.current_turn_id) THEN RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='Assistant current pointers must remain in the same session and candidate';END IF;
+ IF s.status='applied' AND NOT EXISTS(SELECT 1 FROM studio_assistant_applications a WHERE a.session_id=s.id AND a.project_id=s.project_id AND a.turn_id=s.current_turn_id AND a.before_version=s.project_version AND a.after_version=s.applied_project_version AND a.before_hash=s.base_document_hash AND a.after_hash=s.applied_document_hash) OR s.status<>'applied' AND EXISTS(SELECT 1 FROM studio_assistant_applications WHERE session_id=s.id) THEN RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='Assistant application and session close state must commit together';END IF;
+ IF EXISTS(SELECT 1 FROM studio_assistant_generations g WHERE g.session_id=s.id AND g.status='applied' AND NOT EXISTS(SELECT 1 FROM studio_assistant_applications a WHERE a.session_id=s.id AND a.generation_id=g.id AND a.turn_id=g.turn_id)) THEN RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='Applied assistant output requires the original project application';END IF;RETURN NULL;
+END;$dg$;
+CREATE CONSTRAINT TRIGGER native_assistant_final_session AFTER INSERT OR UPDATE ON studio_assistant_sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION dg_native_assistant_final_binding();
+CREATE CONSTRAINT TRIGGER native_assistant_final_source AFTER INSERT OR UPDATE ON _dg_native_assistant_sources DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION dg_native_assistant_final_binding();
+CREATE CONSTRAINT TRIGGER native_assistant_final_turn AFTER INSERT ON studio_assistant_turns DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION dg_native_assistant_final_binding();
+CREATE CONSTRAINT TRIGGER native_assistant_final_generation AFTER INSERT OR UPDATE ON studio_assistant_generations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION dg_native_assistant_final_binding();
+CREATE CONSTRAINT TRIGGER native_assistant_final_application AFTER INSERT ON studio_assistant_applications DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION dg_native_assistant_final_binding();

@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {PNG} from 'pngjs';
+const root='docs/evidence/T20/postgres-character-production',first=root+'/compiled-application',last=root+'/compiled-continued',read=f=>JSON.parse(fs.readFileSync(f,'utf8')),hash=f=>createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+const a=read(first+'/proof.json'),b=read(last+'/proof.json'),media=read(last+'/actual-media.json');assert.equal(b.result,'PASS');assert.equal(a.root,b.root);assert.deepEqual(a.entrySHA256,b.entrySHA256);assert.equal(hash(first+'/actual-motion.mp4'),hash(last+'/actual-motion.mp4'));assert.equal(hash(first+'/actual-applied-export.mp4'),hash(last+'/actual-applied-export.mp4'));
+const ffmpeg=path.resolve('storage/tools/ffmpeg-9.0.2/ffmpeg.exe');
+for(const [input,file]of [['actual-motion.mp4','actual-motion-0500.png'],['actual-applied-export.mp4','actual-applied-export-0500.png']])execFileSync(ffmpeg,['-v','error','-nostdin','-n','-ss','0.500','-i',path.resolve(last,input),'-frames:v','1',path.resolve(last,file)],{windowsHide:true,timeout:30000,maxBuffer:1048576});
+const darkMouth=file=>{const p=PNG.sync.read(fs.readFileSync(file));assert.equal(p.width,512);assert.equal(p.height,768);let count=0;for(let y=210;y<242;y++)for(let x=230;x<282;x++){const i=(y*p.width+x)*4;if(.2126*p.data[i]+.7152*p.data[i+1]+.0722*p.data[i+2]<100)count++;}return count;},open=darkMouth(last+'/actual-motion-1100.png'),closed=darkMouth(last+'/actual-motion-1600.png');assert.ok(open>closed+20);
+fs.writeFileSync(root+'/visual-measurements.json',JSON.stringify({result:'PASS',checkedAt:new Date().toISOString(),sameOriginalMotionAndExportBytesAcrossObservations:true,independentExtractedFrames:['actual-motion-0500.png','actual-motion-1100.png','actual-motion-1600.png','actual-applied-export-0500.png'].map(name=>({file:last+'/'+name,sha256:hash(last+'/'+name)})),fixedSyntheticMouthRegion:{x:230,y:210,width:52,height:32,activeAtMs:1100,inactiveAtMs:1600,activeDarkPixels:open,inactiveDarkPixels:closed,appliesOnlyToThisOriginalRigAndFixture:true},actualExportSHA256:media.export.sha256,phonemeOrRealCloneClaimed:false},null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({result:'PASS',openDarkPixels:open,closedDarkPixels:closed,originalBytesUnchanged:true}));

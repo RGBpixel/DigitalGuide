@@ -1,0 +1,27 @@
+import {nativeVisitHash} from './runtime-visit-hash.js';
+import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
+import {notificationReceiptInput} from '../../contracts/src/index.js';
+import {AppError,canonical,type Principal,requirePermission} from '../../domain/src/index.js';
+import type {GuestVisitView,InternalVisit,Visit} from '../../contracts/src/index.js';
+import type {NativeCoreRepository} from './runtime-repository.js';
+import {nativeBusinessInteger} from './runtime-repository.js';
+interface Descriptor {visitId:string;version:number;sessionId:string;focusVersion:number;contentHash:string;hostId:string;hostVersion:number;recipientId:string;channel:'local'|'mock';noticeVersion:'visit-v1';expiresAt:string}
+interface Projection {visit:Visit|null;descriptor:Descriptor|null;privacyReceipt?:GuestVisitView['privacyReceipt']}
+const messages:Record<string,[number,string]>={IDEMPOTENCY_CONFLICT:[409,'同一回执编号的内容发生变化，旧回执不能被覆盖。'],AUTH_REQUIRED:[401,'本次接待访问已失效，请由前台重新打开终端。'],FORBIDDEN:[403,'当前账号或凭证不能执行此项来访操作。'],NOT_FOUND:[404,'来访记录不存在或无权访问。'],SESSION_ENDED:[410,'本次接待已结束，请联系前台重新开始。'],SOURCE_UNAVAILABLE:[409,'当前接待来源不可用，请请求工作人员协助。'],VALIDATION_FAILED:[400,'来访输入无效，请核对必填资料和确认信息。'],VERSION_CONFLICT:[409,'登记内容、接待账号或服务对象已变化，请刷新后重新核对。'],STATE_CONFLICT:[409,'当前接待状态不允许此操作，请刷新或请求人工协助。'],CONFIRMATION_INVALID:[409,'确认已过期或与当前内容、接待人、渠道不符，请重新核对登记。'],RECIPIENT_UNAVAILABLE:[409,'受访人当前不可通知，请由前台协助。'],QUOTA_EXCEEDED:[429,'本次登记或今日通知已达到上限，请联系前台处理。']};
+export class NativeVisits {
+ constructor(readonly core:NativeCoreRepository,readonly secret:string){}
+ get db(){return this.core.db;}
+ async call<T>(fn:string,args:unknown[]=[]):Promise<T>{try{return(await this.db.query<{value:T}>('SELECT '+fn+'('+args.map((_,i)=>'$'+(i+1)).join(',')+') AS value',args)).rows[0].value;}catch(error){const message=error instanceof Error?error.message:'',match=/^(?:DGVISIT:|DGRECEPTION:|DGVISITHOST:)([A-Z_]+)$/.exec(message),known=match&&messages[match[1]];if(match&&known)throw new AppError(match[1],known[1],known[0]);throw error;}}
+ token(descriptor:Descriptor){return createHmac('sha256',this.secret).update(canonical(['native-visits-v1',this.db.config.runtimeId,this.db.config.appEnv,descriptor])).digest('base64url');}
+ prelock(sid:string,hash:string,alias:string|null=null){return this.call<Record<string,unknown>>('dg_native_visit_prelock',[sid,hash,alias]);}
+ async sweep(){return nativeBusinessInteger(await this.call<unknown>('dg_native_visit_sweep'));}
+ async view(sid:string,hash:string):Promise<GuestVisitView>{const value=await this.call<Projection>('dg_native_visit_guest_view',[sid,hash]);if(value.descriptor&&value.visit)await this.call('dg_native_speaker_visit_confirmation_bind',[sid,hash,value.visit.id,nativeVisitHash(value.descriptor),createHash('sha256').update(this.token(value.descriptor)).digest('hex')]);return{visit:value.visit,confirmation:value.descriptor?{token:this.token(value.descriptor),expiresAt:value.descriptor.expiresAt}:null,notificationChannels:['local','mock'],...(value.privacyReceipt?{privacyReceipt:value.privacyReceipt}:{})};}
+ async bindConfirmation(sid:string,hash:string,id:string){const value=await this.call<Projection>('dg_native_visit_guest_view',[sid,hash]);if(value.descriptor&&value.visit?.id===id)await this.call('dg_native_visit_confirmation_bind',[sid,hash,id,createHash('sha256').update(this.token(value.descriptor)).digest('hex')]);}
+ async apply(sid:string,hash:string,csrfHash:string,action:string,input:Record<string,unknown>,hint:Record<string,unknown>){if(action==='erase')return this.call<string>('dg_native_visit_erase',[sid,hash,csrfHash,input]);const id=await this.call<string>('dg_native_visit_guest_apply',[sid,hash,csrfHash,action,input,hint]);if(action==='draft')await this.bindConfirmation(sid,hash,id);return id;}
+ async staffScope(p:Principal,id:string,ownOnly=false,write=false){requirePermission(p,ownOnly?'visit.respond':'visit.manage');return this.call<string>('dg_native_visit_staff_scope',[id,ownOnly,write]);}
+ async staffView(p:Principal,id:string,ownOnly=false){requirePermission(p,ownOnly?'visit.respond':'visit.manage');return this.call<InternalVisit>('dg_native_visit_staff_view',[id,ownOnly]);}
+ async staffList(p:Principal,workspaces:string[],cursor:string,limit:number,ownOnly=false){requirePermission(p,ownOnly?'visit.respond':'visit.manage');return this.call<InternalVisit[]>('dg_native_visit_staff_list',[workspaces,cursor,limit,ownOnly]);}
+ async staffApply(p:Principal,id:string,action:string,input:Record<string,unknown>){requirePermission(p,action==='respond'?'visit.respond':'visit.manage');return this.call<string>('dg_native_visit_staff_apply',[id,action,input]);}
+ receiptSignature(input:unknown){return createHmac('sha256',this.secret).update(canonical(['native-visit-receipt-v1',this.db.config.runtimeId,this.db.config.appEnv,notificationReceiptInput.parse(input)])).digest('hex');}
+ async receipt(input:unknown,signature:unknown){const b=notificationReceiptInput.parse(input),expected=this.receiptSignature(b);if(typeof signature!=='string'||!/^[a-f0-9]{64}$/.test(signature)||!timingSafeEqual(Buffer.from(signature),Buffer.from(expected)))throw new AppError('INVALID_SIGNATURE','通知回执签名无效，未改变投递或接待状态。',401);if(Math.abs(Date.parse(await this.db.now())-Date.parse(b.occurredAt))>300000)throw new AppError('RECEIPT_EXPIRED','通知回执已超出允许时间窗口。',409);return this.call<{accepted:boolean;duplicate:boolean;deliveryId:string;status:string}>('dg_native_visit_receipt',[b,nativeVisitHash(b)]);}
+}

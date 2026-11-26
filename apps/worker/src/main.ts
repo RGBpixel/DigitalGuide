@@ -1,0 +1,133 @@
+import {runNativeCoreWorker} from './postgres-core.js';
+import {cleanupPractice} from './practice-cleanup.js';
+import {runContentWritingJob} from './content-writing.js';
+import {runLiveAnswerJob} from './live-answers.js';
+import {runLiveSpeechJob} from './live-speech.js';
+import {runAssistantInterpretation} from './assistant-interpretations.js';
+import {runPresentationAnswerJob} from './presentation-answers.js';
+import {tickStudioAssistant} from './studio-assistant.js';
+import {tickAdvertising} from './advertising.js';
+import {runLiveOutput} from './live-output.js';
+import {runAeJob} from './ae-renders.js';
+import {runAeSourceExport} from './ae-source-exports.js';
+import {runAeMediaAdoption} from './ae-media-adoptions.js';
+import {tickLivePeers} from './live-peers.js';
+import {runGovernanceDelivery} from './content-governance.js';
+import {tickLiveSessions} from './live-control.js';
+import {runLiveRecording} from './live-recordings.js';
+import {sweepShares} from '../../api/src/shares.js';
+import {runCollectionReceipt} from './file-collections.js';
+import {runCourseExport} from './course-exports.js';
+import { runCharacterJob } from './character-jobs.js';
+import {runMediaProcessingJob} from './media-processing.js';
+import {runTranscriptionJob} from './transcriptions.js';
+import {runFrameReview} from './frame-reviews.js';
+import { sweepDiningAftercare } from '../../api/src/dining-aftercare-state.js';
+import { expireDining } from '../../api/src/restaurant-state.js';
+import { runRestaurantDispatch } from './restaurant-dispatch.js';
+import { runFinancialOperation } from './financial-dispatch.js';
+import { runSpeechJob } from './speech-jobs.js';
+import { runPublishingJob,runPublishingPackage } from './publishing.js';
+import { runStudioBatch } from './studio-batches.js';
+import { runStudioImport } from './studio-imports.js';
+import { runTimelinePreview } from './timeline-previews.js';
+import { runStudioExport } from './studio-exports.js';
+import { runMediaTransfer } from './media-transfers.js';
+import { runStudioPreview } from './studio-previews.js';
+import { TourService } from '../../api/src/tour-service.js';
+import { ExhibitionDevices } from '../../api/src/exhibition-devices.js';
+import { Repository } from '@digitalguide/database';
+import { loadConfig } from '../../api/src/config.js';
+import {assertRecoveryWorkerDisabled} from '../../../packages/recovery/src/guard.js';
+import { dispatchOutbox, runOne } from './runner.js';
+import { ReceptionService } from '../../api/src/reception-service.js';
+import { VisitService } from '../../api/src/visit-service.js';
+import { processVisitNotification } from './visit-notifications.js';
+import { MemoryService } from '../../api/src/memory-service.js';
+import { processMemoryGreetings } from './memory-greetings.js';
+import { processOfficeNotification } from './office-notifications.js';
+const config = loadConfig();assertRecoveryWorkerDisabled(config.dataDir);
+if(config.nativePostgres){await runNativeCoreWorker(config);}else{
+const repo = new Repository(config.dataDir, config.root,{environment:config.providerMode,appEnv:config.appEnv});
+repo.aeCatalogHost=config;
+let stopping = false, nextPrivacySweep = 0;const stopController = new AbortController(),studioExports = new Set<Promise<unknown>>();
+let documentImport: Promise<unknown> | null = null, storyboardPreview: Promise<unknown> | null = null,timelinePreview: Promise<unknown> | null = null,mediaTransfer: Promise<unknown> | null = null,publishing:Promise<unknown>|null=null,publishingPackage:Promise<unknown>|null=null;
+let aeRender:Promise<unknown>|null=null;
+let aeSourceExport:Promise<unknown>|null=null;
+let aeMediaAdoption:Promise<unknown>|null=null;
+let governanceDelivery:Promise<unknown>|null=null;
+let advertisingTick:Promise<unknown>|null=null;
+let studioAssistantTick:Promise<unknown>|null=null;
+let assistantInterpretation:Promise<unknown>|null=null;
+let presentationAnswer:Promise<unknown>|null=null;
+let contentWriting:Promise<unknown>|null=null;
+let liveAnswer:Promise<unknown>|null=null;
+let liveSpeech:Promise<unknown>|null=null;
+let liveControlTick:Promise<unknown>|null=null;
+const liveOutputs=new Set<Promise<unknown>>();
+let liveRecording:Promise<unknown>|null=null;
+let restaurantDispatch:Promise<unknown>|null=null;
+let financialOperation:Promise<unknown>|null=null;
+let speechJob:Promise<unknown>|null=null;
+let characterJob:Promise<unknown>|null=null;
+let mediaProcessing:Promise<unknown>|null=null;
+let transcription:Promise<unknown>|null=null;
+let frameReview:Promise<unknown>|null=null;
+let collectionReceipt:Promise<unknown>|null=null;
+let courseExport:Promise<unknown>|null=null;
+process.on('SIGINT', () => { stopping = true;stopController.abort(); }); process.on('SIGTERM', () => { stopping = true;stopController.abort(); });
+console.log(`DigitalGuide worker · ${config.providerMode} · 本地持久队列`);
+try {
+  while (!stopping) {
+    try{cleanupPractice(repo,config);}catch{/* Expired records remain unreadable; retention retries without stopping unrelated work. */}
+    if(!liveAnswer)liveAnswer=runLiveAnswerJob(repo,config,stopController.signal).catch(()=>{/* Fixed public-source model jobs recover independently. */}).finally(()=>{liveAnswer=null;});
+    if(!liveSpeech)liveSpeech=runLiveSpeechJob(repo,config,stopController.signal).catch(()=>{/* Durable local speech jobs recover independently. */}).finally(()=>{liveSpeech=null;});
+    if(!presentationAnswer)presentationAnswer=runPresentationAnswerJob(repo,config,stopController.signal).catch(()=>{/* Durable answer and native resource leases recover independently. */}).finally(()=>{presentationAnswer=null;});
+    if(!assistantInterpretation)assistantInterpretation=runAssistantInterpretation(repo,config,stopController.signal).catch(()=>{/* Durable semantic interpretation leases recover independently. */}).finally(()=>{assistantInterpretation=null;});
+    if(!contentWriting)contentWriting=runContentWritingJob(repo,config,stopController.signal).catch(()=>{/* Persistent source-script jobs share the native CPU lease. */}).finally(()=>{contentWriting=null;});
+    if(!courseExport)courseExport=runCourseExport(repo,config,stopController.signal).catch(()=>{/* Course export leases recover independently without blocking other workflows. */}).finally(()=>{courseExport=null;});
+    if(!collectionReceipt)collectionReceipt=runCollectionReceipt(repo,config,stopController.signal).catch(()=>{/* Isolated upload leases recover without blocking other workflows. */}).finally(()=>{collectionReceipt=null;});
+    if(!frameReview)frameReview=runFrameReview(repo,config,stopController.signal).catch(()=>{/* Durable review-copy leases recover without blocking other workflows. */}).finally(()=>{frameReview=null;});
+    if(!transcription)transcription=runTranscriptionJob(repo,config,stopController.signal).catch(()=>{/* File-recognition leases recover without blocking other workflows. */}).finally(()=>{transcription=null;});
+    if(!mediaProcessing)mediaProcessing=runMediaProcessingJob(repo,config,stopController.signal).catch(()=>{/* Durable media leases recover independently from other workflows. */}).finally(()=>{mediaProcessing=null;});
+    if(!characterJob)characterJob=runCharacterJob(repo,config,stopController.signal).catch(()=>{/* Local character jobs retain durable leases; other workflows continue. */}).finally(()=>{characterJob=null;});
+    if(!speechJob)speechJob=runSpeechJob(repo,config,stopController.signal).catch(()=>{/* Local speech leases recover without blocking other workflows. */}).finally(()=>{speechJob=null;});
+    if(!financialOperation)financialOperation=runFinancialOperation(repo,config,stopController.signal).catch(()=>{/* Financial leases preserve unknown outcomes; other platform workflows continue. */}).finally(()=>{financialOperation=null;});
+    if(!restaurantDispatch)restaurantDispatch=runRestaurantDispatch(repo,config,stopController.signal).catch(()=>{/* Other workflows continue; uncertain sends recover through their durable lease. */}).finally(()=>{restaurantDispatch=null;});
+    if (!mediaTransfer) mediaTransfer = runMediaTransfer(repo,config,stopController.signal).catch(() => { /* Persisted transfer leases recover after interruption. */ }).finally(() => { mediaTransfer = null; });
+    runStudioBatch(repo,config);
+    if(!publishing)publishing=runPublishingJob(repo,config,stopController.signal).catch(()=>{/* Durable publication states prevent automatic resubmission after uncertain results. */}).finally(()=>{publishing=null;});
+    if(!publishingPackage)publishingPackage=runPublishingPackage(repo,config,stopController.signal).catch(()=>{/* Package leases recover derivative-file work after interruption. */}).finally(()=>{publishingPackage=null;});
+    if (studioExports.size < 2) { const work = runStudioExport(repo,config,stopController.signal).catch(() => { /* Durable leases recover interrupted runners. */ }).finally(() => { studioExports.delete(work); });studioExports.add(work); }
+    if (!timelinePreview) timelinePreview = runTimelinePreview(repo,config).catch(() => { /* Persistent lease recovery handles an interrupted runner. */ }).finally(() => { timelinePreview = null; });
+    if (!governanceDelivery) governanceDelivery=runGovernanceDelivery(repo,config,stopController.signal).catch(()=>{ /* Durable governed output remains recoverable. */ }).finally(()=>{governanceDelivery=null;});
+    if(!studioAssistantTick)studioAssistantTick=tickStudioAssistant(repo,config,stopController.signal).catch(()=>{/* Staged edits retain child IDs and never replace the source project automatically. */}).finally(()=>{studioAssistantTick=null;});
+    if (!advertisingTick)advertisingTick=tickAdvertising(repo,config,stopController.signal).catch(()=>{/* Advertising intents and reports recover independently. */}).finally(()=>{advertisingTick=null;});
+    if (!liveControlTick) liveControlTick=tickLiveSessions(repo,config).catch(()=>{ /* One live scene cannot stop unrelated workflows. */ }).finally(()=>{liveControlTick=null;});
+    if (liveOutputs.size<3){const output=runLiveOutput(repo,config,stopController.signal).catch(()=>{ /* Each output owns a recoverable lease. */ }).finally(()=>{liveOutputs.delete(output);});liveOutputs.add(output);}
+    if (!liveRecording) liveRecording=runLiveRecording(repo,config,stopController.signal).catch(()=>{ /* Recording has its own durable lease. */ }).finally(()=>{liveRecording=null;});
+    if (!aeRender) aeRender=runAeJob(repo,config,stopController.signal).catch(()=>{ /* Durable AE lease recovery preserves other workflows. */ }).finally(()=>{aeRender=null;});
+    if (!aeSourceExport) aeSourceExport=runAeSourceExport(repo,config,stopController.signal).catch(()=>{ /* Source ZIP leases recover without requiring an AE renderer. */ }).finally(()=>{aeSourceExport=null;});
+    if (!aeMediaAdoption) aeMediaAdoption=runAeMediaAdoption(repo,config,stopController.signal).catch(()=>{ /* AE adoption owns a durable lease and cannot stall other modules. */ }).finally(()=>{aeMediaAdoption=null;});
+    if (!documentImport) documentImport = runStudioImport(repo, config).catch(() => { /* The durable job is recoverable after its lease. */ }).finally(() => { documentImport = null; });
+    if (!storyboardPreview) storyboardPreview = runStudioPreview(repo, config).catch(() => { /* Keep other workflows running; lease recovery handles a failed runner. */ }).finally(() => { storyboardPreview = null; });
+    if (config.providerMode === 'mock') await runOne(repo, config.providerMode);
+    if (config.providerMode === 'mock') await processVisitNotification(repo, config.providerMode, config.appEnv);
+    processMemoryGreetings(repo, config.providerMode, config.appEnv);
+    tickLivePeers(repo,config);
+    await processOfficeNotification(repo, config.providerMode, config.appEnv);
+    repo.transaction(() => new TourService(repo, config.providerMode, config.appEnv).sweep());
+    new ExhibitionDevices(repo, config.providerMode, config.appEnv).process();
+    repo.transaction(()=>expireDining(repo,config));
+    dispatchOutbox(repo, config.providerMode);
+    repo.transaction(() => new ReceptionService(repo, config.providerMode, config.appEnv).expire());
+    repo.transaction(() => new VisitService(repo, config.providerMode, config.appEnv).sweep());
+    if (Date.now() >= nextPrivacySweep) {
+      repo.transaction(() => {new MemoryService(repo, config.providerMode, config.appEnv).sweep();sweepDiningAftercare(repo,config);sweepShares(repo,config);});
+      nextPrivacySweep = Date.now() + 60000;
+    }
+    await new Promise(resolve => setTimeout(resolve, 350));
+  }
+} finally { await Promise.allSettled([contentWriting,liveAnswer,liveSpeech,presentationAnswer,assistantInterpretation,studioAssistantTick,advertisingTick,...liveOutputs,liveRecording,liveControlTick,governanceDelivery,aeSourceExport,aeMediaAdoption,aeRender,documentImport, storyboardPreview,timelinePreview,...studioExports,mediaTransfer,publishing,publishingPackage,restaurantDispatch,financialOperation,speechJob,characterJob,mediaProcessing,transcription,frameReview,collectionReceipt,courseExport]); repo.close(); }
+
+}

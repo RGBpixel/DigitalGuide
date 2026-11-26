@@ -1,0 +1,5 @@
+import type {PresentationAnswerResult} from '@digitalguide/contracts';
+const labels={answered:'有讲稿依据',insufficient_source:'讲稿无法核实',out_of_scope:'超出本次答疑范围'};
+export function QuestionPartAnswers({composition}:{composition:NonNullable<PresentationAnswerResult['composition']>}){
+ return <section className="presentation-answer-parts" aria-label="逐子问答复"><p>{composition.coverage==='complete'?'各段问题均已给出讲稿出处。':composition.coverage==='partial'?'部分问题有讲稿依据；其余部分需要主持人补充或不属于本次答疑。':'当前各段问题均未得到可用的讲稿答复。'}</p><ol>{composition.parts.map(part=><li key={part.id} aria-label={'问题片段'+part.id.slice(1)}><blockquote className="presentation-question-quote">{part.questionQuote}</blockquote><strong>{labels[part.status]}</strong><p>{part.answer}</p>{part.citations.length>0&&<details><summary>查看该子问的讲稿出处</summary><ul>{part.citations.map((c,n)=><li key={n}>第{c.pageNumber}页 · {c.title}<blockquote>{c.quote}</blockquote></li>)}</ul></details>}</li>)}</ol><p className="form-help">分段保留原话，引用只证明讲稿中存在对应文字；答复含义、条件和数字仍需核对。</p></section>;
+}

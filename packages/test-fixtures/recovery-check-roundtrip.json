@@ -1,0 +1,98 @@
+[
+  {
+    "table": "_dg_native_visit_hosts",
+    "name": "_dg_native_visit_hosts_check",
+    "source": "CHECK ((((char_length(alias) >= 1) AND (char_length(alias) <= 40)) AND ((char_length(alias_key) >= 1) AND (char_length(alias_key) <= 40))))",
+    "target": "CHECK (((char_length(alias) >= 1) AND (char_length(alias) <= 40) AND ((char_length(alias_key) >= 1) AND (char_length(alias_key) <= 40))))"
+  },
+  {
+    "table": "knowledge_versions",
+    "name": "native_knowledge_version_shape",
+    "source": "CHECK ((((ordinal >= 1) AND (ordinal <= 100)) AND (status = ANY (ARRAY['draft'::text, 'published'::text, 'superseded'::text, 'withdrawn'::text])) AND ((char_length(title) >= 1) AND (char_length(title) <= 100)) AND ((char_length(content) >= 1) AND (char_length(content) <= 30000)) AND (content_hash = encode(sha256(convert_to(content, 'UTF8'::name)), 'hex'::text)) AND ((source_url IS NULL) OR ((source_url ~* '^https?://'::text) AND (source_url !~* '^https?://[^/]*@'::text)))))",
+    "target": "CHECK (((ordinal >= 1) AND (ordinal <= 100) AND (status = ANY (ARRAY['draft'::text, 'published'::text, 'superseded'::text, 'withdrawn'::text])) AND ((char_length(title) >= 1) AND (char_length(title) <= 100)) AND ((char_length(content) >= 1) AND (char_length(content) <= 30000)) AND (content_hash = encode(sha256(convert_to(content, 'UTF8'::name)), 'hex'::text)) AND ((source_url IS NULL) OR ((source_url ~* '^https?://'::text) AND (source_url !~* '^https?://[^/]*@'::text)))))"
+  },
+  {
+    "table": "live_guest_programme_connections",
+    "name": "native_programme_connection_shape",
+    "source": "CHECK (((version > 0) AND (guest_sequence >= 0) AND (audio_muted = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND (video_hidden = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND (video_ready = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND (audio_ready = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND ((rtp_audio >= 0) AND (rtp_audio <= '1000000000000'::bigint)) AND ((rtp_video >= 0) AND (rtp_video <= '1000000000000'::bigint)) AND ((decoded_frames >= 0) AND (decoded_frames <= '1000000000000'::bigint)) AND ((decoded_pcm_bytes >= 0) AND (decoded_pcm_bytes <= '1000000000000'::bigint)) AND (((server_offer IS NULL) AND (server_offer_hash IS NULL)) OR (((octet_length(server_offer) >= 1) AND (octet_length(server_offer) <= 65536)) AND (server_offer_hash = encode(sha256(convert_to(server_offer, 'UTF8'::name)), 'hex'::text)))) AND (((guest_answer IS NULL) AND (guest_answer_hash IS NULL)) OR (((octet_length(guest_answer) >= 1) AND (octet_length(guest_answer) <= 65536)) AND (guest_answer_hash = encode(sha256(convert_to(guest_answer, 'UTF8'::name)), 'hex'::text))))))",
+    "target": "CHECK (((version > 0) AND (guest_sequence >= 0) AND (audio_muted = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND (video_hidden = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND (video_ready = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND (audio_ready = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND ((rtp_audio >= 0) AND (rtp_audio <= '1000000000000'::bigint)) AND ((rtp_video >= 0) AND (rtp_video <= '1000000000000'::bigint)) AND ((decoded_frames >= 0) AND (decoded_frames <= '1000000000000'::bigint)) AND ((decoded_pcm_bytes >= 0) AND (decoded_pcm_bytes <= '1000000000000'::bigint)) AND (((server_offer IS NULL) AND (server_offer_hash IS NULL)) OR ((octet_length(server_offer) >= 1) AND (octet_length(server_offer) <= 65536) AND (server_offer_hash = encode(sha256(convert_to(server_offer, 'UTF8'::name)), 'hex'::text)))) AND (((guest_answer IS NULL) AND (guest_answer_hash IS NULL)) OR ((octet_length(guest_answer) >= 1) AND (octet_length(guest_answer) <= 65536) AND (guest_answer_hash = encode(sha256(convert_to(guest_answer, 'UTF8'::name)), 'hex'::text))))))"
+  },
+  {
+    "table": "live_output_generations",
+    "name": "native_output_generation_shape",
+    "source": "CHECK ((((number >= 1) AND (number <= 3)) AND (start_frame >= 0) AND ((accepted_frames >= 0) AND (accepted_frames <= 43224)) AND ((encoded_frames >= 0) AND (encoded_frames <= accepted_frames)) AND ((published_frames >= 0) AND (published_frames <= 43224)) AND ((duration_ms >= 0) AND (duration_ms <= 1803000)) AND (status = ANY (ARRAY['preparing'::text, 'running'::text, 'completed'::text, 'interrupted'::text]))))",
+    "target": "CHECK (((number >= 1) AND (number <= 3) AND (start_frame >= 0) AND ((accepted_frames >= 0) AND (accepted_frames <= 43224)) AND ((encoded_frames >= 0) AND (encoded_frames <= accepted_frames)) AND ((published_frames >= 0) AND (published_frames <= 43224)) AND ((duration_ms >= 0) AND (duration_ms <= 1803000)) AND (status = ANY (ARRAY['preparing'::text, 'running'::text, 'completed'::text, 'interrupted'::text]))))"
+  },
+  {
+    "table": "live_output_parts",
+    "name": "native_output_part_shape",
+    "source": "CHECK ((((sequence >= 0) AND (sequence <= 1803)) AND ((size >= 1) AND (size <= 33554432)) AND (sha256 ~ '^[a-f0-9]{64}$'::text) AND (storage_key ~ '^[a-f0-9-]{36}\\.bin$'::text) AND (((kind = 'init'::text) AND (sequence = 0) AND (duration_ms = 0) AND (media_start_ms = 0)) OR ((kind = 'segment'::text) AND ((duration_ms >= 1) AND (duration_ms <= 2000)) AND (media_start_ms >= 0)))))",
+    "target": "CHECK (((sequence >= 0) AND (sequence <= 1803) AND ((size >= 1) AND (size <= 33554432)) AND (sha256 ~ '^[a-f0-9]{64}$'::text) AND (storage_key ~ '^[a-f0-9-]{36}\\.bin$'::text) AND (((kind = 'init'::text) AND (sequence = 0) AND (duration_ms = 0) AND (media_start_ms = 0)) OR ((kind = 'segment'::text) AND ((duration_ms >= 1) AND (duration_ms <= 2000)) AND (media_start_ms >= 0)))))"
+  },
+  {
+    "table": "live_output_presentations",
+    "name": "native_output_presentation_shape",
+    "source": "CHECK ((((version >= 1) AND (version <= 200)) AND (presentation_hash = encode(sha256(convert_to(presentation, 'UTF8'::name)), 'hex'::text)) AND (status = ANY (ARRAY['pending'::text, 'applied'::text, 'superseded'::text])) AND ((status <> 'applied'::text) OR ((generation_id IS NOT NULL) AND (media_frame >= 0) AND (applied_at IS NOT NULL)))))",
+    "target": "CHECK (((version >= 1) AND (version <= 200) AND (presentation_hash = encode(sha256(convert_to(presentation, 'UTF8'::name)), 'hex'::text)) AND (status = ANY (ARRAY['pending'::text, 'applied'::text, 'superseded'::text])) AND ((status <> 'applied'::text) OR ((generation_id IS NOT NULL) AND (media_frame >= 0) AND (applied_at IS NOT NULL)))))"
+  },
+  {
+    "table": "live_peer_consents",
+    "name": "native_peer_consent_shape",
+    "source": "CHECK ((((version >= 1) AND (version <= 5)) AND (camera = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND (microphone = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND ((camera + microphone) > 0) AND (purpose = 'backstage_call'::text) AND (statement_version = 'backstage-call-v1'::text)))",
+    "target": "CHECK (((version >= 1) AND (version <= 5) AND (camera = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND (microphone = ANY (ARRAY[(0)::bigint, (1)::bigint])) AND ((camera + microphone) > 0) AND (purpose = 'backstage_call'::text) AND (statement_version = 'backstage-call-v1'::text)))"
+  },
+  {
+    "table": "live_peer_limits",
+    "name": "native_peer_limit_shape",
+    "source": "CHECK ((((count >= 1) AND (count <= 1000000)) AND (length(key) = 64)))",
+    "target": "CHECK (((count >= 1) AND (count <= 1000000) AND (length(key) = 64)))"
+  },
+  {
+    "table": "live_peer_signals",
+    "name": "native_peer_signal_shape",
+    "source": "CHECK ((((sequence >= 1) AND (sequence <= 96)) AND (octet_length(payload) <= 70000) AND (payload_hash = encode(sha256(convert_to(payload, 'UTF8'::name)), 'hex'::text)) AND (((payload)::jsonb ->> 'kind'::text) = ANY (ARRAY['description'::text, 'candidate'::text]))))",
+    "target": "CHECK (((sequence >= 1) AND (sequence <= 96) AND (octet_length(payload) <= 70000) AND (payload_hash = encode(sha256(convert_to(payload, 'UTF8'::name)), 'hex'::text)) AND (((payload)::jsonb ->> 'kind'::text) = ANY (ARRAY['description'::text, 'candidate'::text]))))"
+  },
+  {
+    "table": "live_program_versions",
+    "name": "native_live_version_shape",
+    "source": "CHECK ((((version >= 1) AND (version <= 200)) AND (definition_hash = encode(sha256(convert_to(definition, 'UTF8'::name)), 'hex'::text))))",
+    "target": "CHECK (((version >= 1) AND (version <= 200) AND (definition_hash = encode(sha256(convert_to(definition, 'UTF8'::name)), 'hex'::text))))"
+  },
+  {
+    "table": "live_segments",
+    "name": "native_live_segment_shape",
+    "source": "CHECK ((((seq >= 0) AND (seq <= 599)) AND (segment_hash = encode(sha256(convert_to(segment, 'UTF8'::name)), 'hex'::text))))",
+    "target": "CHECK (((seq >= 0) AND (seq <= 599) AND (segment_hash = encode(sha256(convert_to(segment, 'UTF8'::name)), 'hex'::text))))"
+  },
+  {
+    "table": "media_transfers",
+    "name": "native_transfer_bounds",
+    "source": "CHECK ((((size >= 1) AND (size <= 1073741824)) AND (chunk_size = 4194304) AND ((chunk_count >= 1) AND (chunk_count <= 256)) AND ((attempts >= 0) AND (attempts <= 2)) AND ((progress >= (0)::double precision) AND (progress <= (1)::double precision)) AND (version > 0)))",
+    "target": "CHECK (((size >= 1) AND (size <= 1073741824) AND (chunk_size = 4194304) AND ((chunk_count >= 1) AND (chunk_count <= 256)) AND ((attempts >= 0) AND (attempts <= 2)) AND ((progress >= (0)::double precision) AND (progress <= (1)::double precision)) AND (version > 0)))"
+  },
+  {
+    "table": "studio_assistant_generations",
+    "name": "native_assistant_generation_shape",
+    "source": "CHECK ((((number >= 1) AND (number <= 3)) AND (version > 0) AND (status = ANY (ARRAY['queued'::text, 'speech'::text, 'video'::text, 'ready'::text, 'failed'::text, 'cancelled'::text, 'applied'::text])) AND (plan_hash ~ '^[a-f0-9]{64}$'::text) AND (jsonb_typeof((plan)::jsonb) = 'object'::text) AND (jsonb_typeof((exports)::jsonb) = 'array'::text) AND (jsonb_array_length((exports)::jsonb) <= 8)))",
+    "target": "CHECK (((number >= 1) AND (number <= 3) AND (version > 0) AND (status = ANY (ARRAY['queued'::text, 'speech'::text, 'video'::text, 'ready'::text, 'failed'::text, 'cancelled'::text, 'applied'::text])) AND (plan_hash ~ '^[a-f0-9]{64}$'::text) AND (jsonb_typeof((plan)::jsonb) = 'object'::text) AND (jsonb_typeof((exports)::jsonb) = 'array'::text) AND (jsonb_array_length((exports)::jsonb) <= 8)))"
+  },
+  {
+    "table": "studio_assistant_turns",
+    "name": "native_assistant_turn_shape",
+    "source": "CHECK ((((number >= 1) AND (number <= 30)) AND (provider = ANY (ARRAY['local_commands'::text, 'manual'::text, 'mock_editor'::text, 'external_editor'::text, 'local_llm'::text])) AND (proposal_hash ~ '^[a-f0-9]{64}$'::text) AND (jsonb_typeof((proposal)::jsonb) = 'object'::text)))",
+    "target": "CHECK (((number >= 1) AND (number <= 30) AND (provider = ANY (ARRAY['local_commands'::text, 'manual'::text, 'mock_editor'::text, 'external_editor'::text, 'local_llm'::text])) AND (proposal_hash ~ '^[a-f0-9]{64}$'::text) AND (jsonb_typeof((proposal)::jsonb) = 'object'::text)))"
+  },
+  {
+    "table": "studio_presentation_plan_versions",
+    "name": "native_presentation_revision_shape",
+    "source": "CHECK ((((version >= 1) AND (version <= 100)) AND (definition_hash ~ '^[a-f0-9]{64}$'::text)))",
+    "target": "CHECK (((version >= 1) AND (version <= 100) AND (definition_hash ~ '^[a-f0-9]{64}$'::text)))"
+  },
+  {
+    "table": "studio_presentation_plans",
+    "name": "native_presentation_plan_shape",
+    "source": "CHECK ((((version >= 1) AND (version <= 100)) AND (source_project_version > 0) AND (source_hash ~ '^[a-f0-9]{64}$'::text) AND (definition_hash ~ '^[a-f0-9]{64}$'::text) AND ((definition)::jsonb ? 'pages'::text) AND (jsonb_typeof(((definition)::jsonb -> 'pages'::text)) = 'array'::text) AND ((jsonb_array_length(((definition)::jsonb -> 'pages'::text)) >= 1) AND (jsonb_array_length(((definition)::jsonb -> 'pages'::text)) <= 40))))",
+    "target": "CHECK (((version >= 1) AND (version <= 100) AND (source_project_version > 0) AND (source_hash ~ '^[a-f0-9]{64}$'::text) AND (definition_hash ~ '^[a-f0-9]{64}$'::text) AND ((definition)::jsonb ? 'pages'::text) AND (jsonb_typeof(((definition)::jsonb -> 'pages'::text)) = 'array'::text) AND ((jsonb_array_length(((definition)::jsonb -> 'pages'::text)) >= 1) AND (jsonb_array_length(((definition)::jsonb -> 'pages'::text)) <= 40))))"
+  }
+]

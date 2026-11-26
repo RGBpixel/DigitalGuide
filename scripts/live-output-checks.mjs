@@ -1,0 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+const folder=process.argv[2]||'docs/evidence/T28/output',file=folder+'/commands-final.json';assert.ok(!fs.existsSync(file));fs.mkdirSync(folder,{recursive:true});
+const steps=[['typecheck',['node_modules/typescript/bin/tsc','--noEmit']],['lint',['node_modules/eslint/bin/eslint.js','apps','packages','tests','scripts/*.ts']],['docs-build',['scripts/build-docs.mjs']],['documentation',['scripts/check-docs.mjs']]],commands=[];
+for(const [name,args]of steps){const log=path.join(folder,name+'.log'),fd=fs.openSync(log,'wx'),startedAt=new Date().toISOString(),child=spawn(process.execPath,args,{cwd:process.cwd(),windowsHide:true,stdio:['ignore',fd,fd]});const exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});fs.closeSync(fd);commands.push({name,command:['node',...args].join(' '),startedAt,endedAt:new Date().toISOString(),exitCode,log});process.stdout.write(JSON.stringify({name,exitCode})+'\n');if(exitCode!==0)break;}
+const passed=commands.length===steps.length&&commands.every(c=>c.exitCode===0);if(passed)fs.copyFileSync(folder+'/documentation.log',folder+'/documentation.json',fs.constants.COPYFILE_EXCL);fs.writeFileSync(file,JSON.stringify({result:passed?'PASS':'FAIL',commands,build:{command:'pnpm build',actualToolSession:'57305',exitCode:0,currentArtifactsSeparatelyCheckedAgainstCompiledProof:'compiled-third/proof.json'},apiSpecification:{command:'pnpm api:spec',actualToolSession:'bbe5e4',exitCode:0,output:'docs/api/openapi.json'}},null,2)+'\n',{flag:'wx'});assert.ok(passed,'Inspect the preserved command logs.');

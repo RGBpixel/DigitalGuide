@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import {spawn} from 'node:child_process';
+import assert from 'node:assert/strict';
+const root='docs/evidence/T20/postgres-presentations',label=process.argv[2],pattern=process.argv[3];
+assert.ok(label&&pattern);assert.ok(/^[a-z0-9-]+$/.test(label));
+const args=['node_modules/vitest/vitest.mjs','run','tests/integration/postgres-presentations.test.ts','--testNamePattern',pattern,'--reporter=default','--reporter=json','--outputFile='+root+'/'+label+'.json'];
+const fd=fs.openSync(root+'/'+label+'.log','wx'),startedAt=new Date().toISOString(),child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore',fd,fd]});
+const exitCode=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});fs.closeSync(fd);
+fs.writeFileSync(root+'/'+label+'-command.json',JSON.stringify({command:[process.execPath,...args],startedAt,finishedAt:new Date().toISOString(),exitCode},null,2)+'\n',{flag:'wx'});
+const result=JSON.parse(fs.readFileSync(root+'/'+label+'.json','utf8'));console.log(JSON.stringify({exitCode,passed:result.numPassedTests,failed:result.numFailedTests,skipped:result.numPendingTests}));process.exitCode=exitCode;

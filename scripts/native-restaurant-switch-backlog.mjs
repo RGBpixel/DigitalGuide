@@ -1,0 +1,7 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const file='docs/backlog.json',b=JSON.parse(fs.readFileSync(file,'utf8')),before=JSON.parse(fs.readFileSync('docs/evidence/T20/postgres-restaurant-session/backlog.json.before','utf8')),statuses=x=>['tasks','requirements'].map(k=>x[k].map(r=>[r.id,r.status,r.localStatus,r.liveStatus]));assert.deepEqual(statuses(b),statuses(before));
+const note='2026-11-25 增量104追加089/runtime86/下一090：原生下一位必须固定sessionId/version/focusVersion；SQL锁内拒绝过期目标，UI对象变化后取消勾选。5项定向断言通过、3项新增，累计29不同断言/5文件分阶段有通过记录。088原6种GUI保留；089版本变化取消勾选1种GUI通过，实际暂存请求/另一管理员换人后的409与新顾客保持断言已执行，但原脚本网址参数观察中断FAIL保持。修正pathname并加封存守卫，沿同一cluster-ZXasrz及同76编译续验，没有重复原交错；原访次自然空闲到期后明确另开受控访次，完成版本化重新确认1种GUI，433表/两密钥和活动访次原activityAt/expiresAt经API/PG重启一致。当前类型/lint/构建/OpenAPI通过；seating/ordering/payments/hospitality与guest.dining仍false。预约排队、原子预留落座、本人就餐凭证、偏好推荐、订单后厨与账单服务继续，不把终端依赖当作完整餐厅/T20/G2完成。主33223不重启切库，SQLite052/下一053、134/38/65/26与27本地verified保持；所有真实克隆/声纹/抗噪/视觉/渠道、完整平台及G2要求保留，目标active。';
+const task=b.tasks.find(t=>t.id==='T20');task.progressNote=note+'\n此前088阶段：'+task.progressNote;
+for(const id of ['R-046','R-047','R-056','R-129','R-134']){const r=b.requirements.find(r=>r.id===id);r.progressNote+='\n'+note;}
+assert.deepEqual(statuses(b),statuses(before));fs.writeFileSync(file,JSON.stringify(b,null,2)+'\n');console.log(JSON.stringify({status:task.status,verified:27,nextMigration:'090',goalStatus:'active'}));

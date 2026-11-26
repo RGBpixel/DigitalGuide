@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+function edit(file,from,to){const s=fs.readFileSync(file,'utf8');assert.ok(s.includes(from),file);fs.writeFileSync(file,s.replace(from,()=>to));}
+const file='apps/api/src/postgres-core-app.ts',s=fs.readFileSync(file,'utf8'),line=s.split('\n').find(line=>line.includes("app.get('/api/v1/auth/demo-accounts'"));assert.ok(line);const start=line.indexOf('"SELECT'),end=line.indexOf('",[native.appEnv]');assert.ok(start>0&&end>start);const sql=line.slice(start+1,end).replaceAll('\\"','"').replace('JOIN memberships m',"JOIN ${effectiveMemberships('mock',native.appEnv)} m").replace('WHERE NOT EXISTS','WHERE jsonb_array_length(m.workspace_ids::jsonb)>0 AND NOT EXISTS');fs.writeFileSync(file,s.replace(line,()=>line.slice(0,start)+'`'+sql+'`'+line.slice(end+1)));
+edit('apps/api/src/app.ts',"WHERE NOT EXISTS(SELECT 1 FROM enterprise_member_controls c WHERE c.user_id=u.id", "WHERE json_array_length(m.workspace_ids)>0 AND NOT EXISTS(SELECT 1 FROM enterprise_member_controls c WHERE c.user_id=u.id");
+edit('apps/api/src/app.ts','      repo.principal(input.accountId);',"      if(!repo.principal(input.accountId).workspaceIds.length)throw new AppError('AUTH_REQUIRED','该成员尚未分配工作空间，请联系管理员。',401);");
+edit('packages/postgres/src/runtime-repository.ts','  await this.principal(accountId);const token=',"  if(!(await this.principal(accountId)).workspaceIds.length)throw new AppError('AUTH_REQUIRED','该成员尚未分配工作空间，请联系管理员。',401);const token=");
+// Historical recovery receipts and their rules remain frozen. A directory-bearing restore
+// needs the new directory reconciliation before any old authority receipt can be issued.
+edit('packages/postgres/src/recovery-authority.ts',' const plan=await lockRecoveryReconciliation(context,input,\'authority\'),'," if(context.identity.tables.has('enterprise_member_directory')&&(await context.client.query('SELECT 1 FROM enterprise_member_directory LIMIT 1')).rowCount)throw fail('DIRECTORY_RECONCILIATION_REQUIRED','恢复库含有环境成员权限；必须先完成相应身份及目录核对，原撤权流程不会签发不完整收据。');\n const plan=await lockRecoveryReconciliation(context,input,'authority'),");
+console.log('Explicit demo access and legacy recovery receipt boundaries updated.');

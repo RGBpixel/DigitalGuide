@@ -1,0 +1,5 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T20/postgres-ae-render',file='scripts/native-ae-render-proof.ts',s=fs.readFileSync(file,'utf8'),sha=createHash('sha256').update(s).digest('hex');assert.equal(sha,JSON.parse(fs.readFileSync(root+'/compiled-first-command.json')).sourceSHA256[file]);fs.mkdirSync(root+'/source-before-compiled-fixture');fs.writeFileSync(root+'/source-before-compiled-fixture/native-ae-render-proof.txt',s,{flag:'wx'});
+const anchor='await c.prepare();for(const n',replacement=`await c.prepare();const mediaDirectory=path.join(c.compiledRoot,'storage/tools/ffmpeg-9.0.2');fs.mkdirSync(mediaDirectory,{recursive:true});for(const name of ['ffmpeg.exe','ffprobe.exe','media-tools.json']){const source=path.resolve('storage/tools/ffmpeg-9.0.2',name),target=path.join(mediaDirectory,name);fs.linkSync(source,target);c.linkedTools.push({file:'ffmpeg-9.0.2/'+name,sha256:proofHash(target),size:fs.statSync(target).size});}for(const n`;assert.ok(s.includes(anchor));fs.writeFileSync(file,s.replace(anchor,replacement));

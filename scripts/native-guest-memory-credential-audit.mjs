@@ -1,0 +1,9 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+const root='docs/evidence/T20/postgres-guest-memory',proof=JSON.parse(fs.readFileSync(root+'/compiled-continued/proof.json','utf8')),privateRoot=path.resolve(proof.root),codes=new Set(),privateFiles=[],hash=f=>createHash('sha256').update(fs.readFileSync(f)).digest('hex');assert.ok(privateRoot.startsWith(path.resolve('storage/postgres-native-tests')+path.sep));assert.equal(proof.allDirectChildrenClosed,true);
+function collect(value){if(typeof value==='string'&&/^DG1\.[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}$/.test(value))codes.add(value);else if(Array.isArray(value))for(const item of value)collect(item);else if(value&&typeof value==='object')for(const item of Object.values(value))collect(item);}
+for(const name of fs.readdirSync(privateRoot).filter(n=>n.endsWith('.private.json'))){const file=path.join(privateRoot,name);collect(JSON.parse(fs.readFileSync(file,'utf8')));privateFiles.push({file,sha256:hash(file)});}assert.equal(codes.size,3);
+const walk=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(d+'/'+e.name):[d+'/'+e.name]),files=walk(root).filter(f=>/\.(json|log|md|txt|ts|mjs|sql|ps1)$/.test(f));for(const file of files){const content=fs.readFileSync(file,'utf8');for(const code of codes)assert.equal(content.includes(code),false,'Raw owner recovery capability found in '+file);}
+const result={result:'PASS',checkedAt:new Date().toISOString(),recoveryCapabilities:codes.size,privateFiles,publicTextFilesScanned:files.length,rawValuesStored:false,ownerDownloadsKeptInPrivateValidationDirectory:true,notAnExhaustiveCookieOrProductionSecurityAudit:true};fs.writeFileSync(root+'/credential-value-scan.json',JSON.stringify(result,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({result:'PASS',recoveryCapabilities:codes.size,privateFiles:privateFiles.length,publicTextFilesScanned:files.length}));

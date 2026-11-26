@@ -1,0 +1,5 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {NativeContentProofRuntime} from './postgres-content-proof-runtime.js';
+const base='docs/evidence/T20/postgres-live-terminal',c=await NativeContentProofRuntime.resume(base+'/diagnose-original',base+'/compiled-first/proof.json');let error:unknown;
+try{await c.cluster.start();const sessions=await c.owner(async q=>(await q.query("SELECT s.id,s.status,s.version,s.error_message,s.invalidated_at,s.state,(SELECT count(*) FROM live_segments l WHERE l.session_id=s.id) AS segments,(SELECT count(*) FROM live_commands l WHERE l.session_id=s.id) AS commands FROM live_sessions s")).rows);const programs=await c.owner(async q=>(await q.query('SELECT id,definition FROM live_programs')).rows);c.save('state.json',{sessions,programs});assert.equal(sessions.length,1);c.add('readonly_same_closed_original_instance_inspection_without_state_or_counter_edits');const out=fs.readFileSync(base+'/compiled-first/reference85-worker.stdout.log','utf8');console.log(JSON.stringify({sessions,workerLog:out.slice(-3000)}));}catch(e){error=e;}finally{await c.finish(error);}

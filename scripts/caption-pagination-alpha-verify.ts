@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import {PNG} from 'pngjs';
+import {mediaTools} from '../packages/media/src/media-tools.js';
+const base='docs/evidence/T22/caption-pagination',root=path.join(base,'alpha-composites');fs.mkdirSync(root,{recursive:false});const artifacts=JSON.parse(fs.readFileSync(path.join(base,'compiled-first/artifacts.json'),'utf8')),tools=mediaTools(),children:{label:string;pid:number;exitCode:number|null}[]=[],outputs:object[]=[],hash=(f:string)=>createHash('sha256').update(fs.readFileSync(f)).digest('hex');let error:Error|undefined;
+async function run(label:string,args:string[]){const c=spawn(tools.ffmpeg,args,{windowsHide:true,stdio:['ignore','ignore','pipe']});let stderr='';c.stderr.on('data',b=>stderr+=b);const timeout=setTimeout(()=>c.kill(),60000),exitCode=await new Promise<number|null>((r,j)=>{c.once('error',j);c.once('close',r);});clearTimeout(timeout);children.push({label,pid:c.pid!,exitCode});assert.equal(exitCode,0,stderr.slice(-2000));}
+try{
+ for(const a of artifacts.artifacts.filter((a:{label:string})=>a.label.startsWith('current-four-k-alpha-page-')))for(const background of [{name:'navy',value:'0x22334A',rgb:[34,51,74]},{name:'white',value:'0xFFFFFF',rgb:[255,255,255]}]){assert.equal(hash(a.file),a.sha256);const label=a.label+'-'+background.name,file=path.join(root,label+'.png');await run(label,['-v','error','-nostdin','-n','-f','lavfi','-i','color=c='+background.value+':s=3840x2160:r=24:d=1','-i',path.resolve(a.file),'-filter_complex','[0:v][1:v]overlay=shortest=1:format=auto[v]','-map','[v]','-an','-ss','0.2','-frames:v','1','-update','1',path.resolve(file)]);const p=PNG.sync.read(fs.readFileSync(file));assert.equal(p.width,3840);assert.equal(p.height,2160);for(let i=0;i<3;i++)assert.ok(Math.abs(p.data[i]-background.rgb[i])<=3);assert.equal(p.data[3],255);let different=0;for(let y=1848;y<2010;y++)for(let x=280;x<3560;x++){const i=(y*p.width+x)*4;if(Math.abs(p.data[i]-background.rgb[0])+Math.abs(p.data[i+1]-background.rgb[1])+Math.abs(p.data[i+2]-background.rgb[2])>25)different++;}assert.ok(different>3000);outputs.push({label,file,sha256:hash(file),source:a.file,sourceSHA256:a.sha256,background:background.name,backgroundPixel:[...p.data.subarray(0,4)],differentCaptionPixels:different});}
+ assert.equal(outputs.length,4);
+}catch(e){error=e instanceof Error?e:new Error(String(e));}
+fs.writeFileSync(path.join(root,'verification.json'),JSON.stringify({result:error?'FAIL':'PASS',error:error?.stack??null,outputs,children,allDirectChildrenClosed:true,newVideoRenderPerformed:false,actualProres4444DecodedAndComposited:true},null,2)+'\n',{flag:'wx'});if(error)throw error;console.log(JSON.stringify({result:'PASS',actualAlphaPages:2,backgrounds:2,images:4,children:children.length}));

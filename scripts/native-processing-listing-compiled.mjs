@@ -1,0 +1,6 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+const root='docs/evidence/T20/postgres-media-processing',label='compiled-listing';assert.ok(!fs.existsSync(root+'/'+label));
+const files=['scripts/native-processing-listing-proof.ts','scripts/postgres-content-proof-runtime.ts','packages/postgres/src/runtime-assets.ts','packages/postgres/src/runtime-library.ts','apps/api/src/postgres-asset-routes.ts',...fs.readdirSync('dist').filter(f=>f.endsWith('.mjs')).map(f=>'dist/'+f)],sourceSHA256=Object.fromEntries(files.map(f=>[f,createHash('sha256').update(fs.readFileSync(f)).digest('hex')])),args=['--import','tsx','scripts/native-processing-listing-proof.ts',root+'/'+label],fd=fs.openSync(root+'/'+label+'.log','wx'),startedAt=new Date().toISOString(),child=spawn(process.execPath,args,{windowsHide:true,stdio:['ignore',fd,fd]}),exitCode=await new Promise((r,j)=>{child.once('error',j);child.once('close',r);});fs.closeSync(fd);fs.writeFileSync(root+'/'+label+'-command.json',JSON.stringify({command:[process.execPath,...args],startedAt,finishedAt:new Date().toISOString(),exitCode,sourceSHA256},null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({label,exitCode}));process.exitCode=exitCode;

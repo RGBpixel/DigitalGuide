@@ -1,0 +1,50 @@
+import {ContentWritingPanel} from './ContentWritingPanel.js';
+import { useEffect,useState } from 'react';
+import { useMutation,useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
+import type { ContentDraft,ContentDraftPayload,ContentSection,ContentPlan } from '@digitalguide/contracts';
+import { api } from '../api.js';
+import { Box,ListState,Note,useStudioList } from './shared.js';
+import { ContentDraftCreate } from './ContentDraftCreate.js';
+import { ContentPlanComposer,ContentPlanReview } from './ContentPlanPanels.js';
+import './content.css';
+function DraftEditor({id,workspaceId,writable,onForked,onDirty}:{id:string;workspaceId:string;writable:boolean;onForked:(draft:ContentDraft)=>void;onDirty:(dirty:boolean)=>void}){
+  const live=useQuery({queryKey:['content-draft',workspaceId,id],queryFn:()=>api<ContentDraft>('/studio/content/drafts/'+id),refetchInterval:3000});
+  const [loaded,setLoaded]=useState<ContentDraft|null>(null),[name,setName]=useState(''),[sections,setSections]=useState<ContentSection[]>([]),[selected,setSelected]=useState<string[]>([]),[dirty,setDirty]=useState(false),[variantName,setVariantName]=useState(''),[planId,setPlanId]=useState('');
+  function load(d:ContentDraft){setLoaded(d);setName(d.name);setSections(structuredClone(d.payload?.sections||[]));setSelected(d.payload?.sections[0]?[d.payload.sections[0].id]:[]);setVariantName(d.name+' · 另一版本');setDirty(false);}
+  useEffect(()=>{if(!loaded&&live.data)load(live.data);},[loaded,live.data]);
+  useEffect(()=>{onDirty(dirty);const before=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',before);return()=>window.removeEventListener('beforeunload',before);},[dirty,onDirty]);
+  const history=useQuery({queryKey:['content-draft-history',id,live.data?.version],queryFn:()=>api<{version:number;payload:ContentDraftPayload|null;sourceReason:string|null}[]>('/studio/content/drafts/'+id+'/versions')});
+  const plans=useQuery({queryKey:['content-draft-plans',id],queryFn:()=>api<ContentPlan[]>('/studio/content/drafts/'+id+'/plans'),refetchInterval:3000});
+  const save=useMutation({mutationFn:(adoptCurrentBrief:boolean)=>api<ContentDraft>('/studio/content/drafts/'+id+'/save',{version:loaded!.version,name,sections,adoptCurrentBrief}),onSuccess:d=>{load(d);void live.refetch();}});
+  const fork=useMutation({mutationFn:()=>api<ContentDraft>('/studio/content/drafts/'+id+'/fork',{version:loaded!.version,name:variantName,confirmed:true}),onSuccess:onForked});
+  const restore=useMutation({mutationFn:(revision:number)=>api<ContentDraft>('/studio/content/drafts/'+id+'/restore',{version:loaded!.version,revision,confirmed:true}),onSuccess:d=>{load(d);void live.refetch();}});
+  function edit(sectionId:string,patch:Partial<ContentSection>){setSections(items=>items.map(s=>s.id===sectionId?{...s,...patch}:s));setDirty(true);}
+  if(!loaded)return <><p role="status">正在读取脚本草稿…</p><Note error={live.error}/></>;
+  const current=live.data&&live.data.version>=loaded.version?live.data:loaded,conflict=current.version>loaded.version,busy=save.isPending||fork.isPending||restore.isPending,disabled=!writable||conflict||busy||!current.sourceAvailable;
+  if(!current.sourceAvailable)return <Box title="草稿来源不可用"><p className="error">{current.sourceReason}</p><p>已撤回或到期的正文不再通过草稿及历史提供。请核对当前授权后建立独立新来源。</p><Note error={live.error}/></Box>;
+  return <div className="draft-workbench"><div className="draft-editor-column"><Box title="可编辑脚本"><section className="content-form" aria-label="脚本草稿编辑"><div className="content-summary"><strong>{loaded.name} · v{loaded.version}</strong><span>{loaded.simulated?'明确模拟写作':loaded.payload?.provider==='local-model'?'本机模型起稿 · 可人工修订':'人工 / 本地规则稿'}</span></div>{loaded.payload?.modelOrigin?.reviewOutcome==='needs-human-review'&&<p className="error">起稿时存在模型核对分歧，已明确转入人工修订。请核对当前版本后制作，原模型意见和确认记录保留。</p>}
+    {conflict&&<p className="error">草稿已有新版本，当前输入保留。<button onClick={()=>{if(!dirty||window.confirm('放弃未保存输入并载入当前草稿吗？'))load(current);}}>载入草稿当前版本</button></p>}
+    {current.briefChanged&&<p className="error">账号定位已有新修订，现有台词保留。核对后点击下方采用当前定位，再建立计划。</p>}
+    <fieldset disabled={disabled}><label>当前草稿名称<input value={name} required maxLength={100} onChange={e=>{setName(e.target.value);setDirty(true);}}/></label>
+      {sections.map((s,index)=><article key={s.id} className="draft-section" aria-label={'草稿段落 '+(index+1)}><label className="checkbox-line"><input type="checkbox" aria-label={'选择段落 '+(index+1)} checked={selected.includes(s.id)} onChange={e=>setSelected(ids=>e.target.checked?[...ids,s.id]:ids.filter(id=>id!==s.id))}/>选择本段用于局部修改或映射</label><label>段落标题<input aria-label={'段落标题 '+(index+1)} value={s.title} maxLength={100} onChange={e=>edit(s.id,{title:e.target.value})}/></label><label>台词<textarea aria-label={'草稿台词 '+(index+1)} rows={5} maxLength={4000} value={s.text} onChange={e=>edit(s.id,{text:e.target.value})}/></label><label>建议时长（秒）<input aria-label={'建议时长 '+(index+1)} type="number" min={1} max={600} step={.1} value={s.durationMs/1000} onChange={e=>edit(s.id,{durationMs:Math.round(Number(e.target.value)*1000)})}/></label><button type="button" disabled={sections.length<=1} onClick={()=>{setSections(items=>items.filter(x=>x.id!==s.id));setSelected(ids=>ids.filter(id=>id!==s.id));setDirty(true);}}>移除此段</button></article>)}
+      <div className="studio-actions"><button disabled={sections.length>=40} onClick={()=>{const id=crypto.randomUUID();setSections(items=>[...items,{id,title:'新的段落',text:'',durationMs:5000}]);setDirty(true);}}>添加段落</button><button className="button primary" disabled={!name.trim()||!dirty} onClick={()=>save.mutate(false)}>保存脚本修订</button>{current.briefChanged&&<button onClick={()=>save.mutate(true)}>采用当前定位并保存新修订</button>}</div>
+    </fieldset>{dirty&&<p className="form-help">有未保存输入，请先保存后生成计划或另存变体。</p>}<p className="form-help">时长为可编辑估计。文字变化不等于已重新生成声音、画面或口型。</p>
+    <details><summary>来源、定位与版本记录</summary><p>{loaded.payload?.instruction}</p>{loaded.payload?.brief&&<p>定位：{loaded.payload.brief.configuration.name} · v{loaded.payload.brief.version} · {loaded.payload.brief.configuration.audience}</p>}<p>引用{loaded.payload?.sourceRefs.length||0}份已授权来源；另存变体继承来源约束。</p>{history.data?.map(v=><article key={v.version} className="content-history"><strong>修订v{v.version}</strong>{v.payload?.sections.map(s=><p key={s.id} className="studio-preserve">{s.title}：{s.text}</p>)}{v.sourceReason&&<p>{v.sourceReason}</p>}{writable&&v.payload&&<button disabled={disabled||dirty||v.version===loaded.version} onClick={()=>{if(window.confirm('将此历史内容恢复为新的脚本修订吗？当前版本会保留。'))restore.mutate(v.version);}}>将v{v.version}恢复为新修订</button>}</article>)}<Note error={history.error}/></details>
+    <div className="content-form"><label>另存变体名称<input value={variantName} maxLength={100} disabled={disabled} onChange={e=>setVariantName(e.target.value)}/></label><button disabled={disabled||dirty||!variantName.trim()} onClick={()=>fork.mutate()}>另存独立脚本变体</button></div><Note error={save.error||fork.error||restore.error||live.error}/>
+  </section></Box></div><div className="draft-plan-column">
+    <ContentPlanComposer key={loaded.id+':'+loaded.version} workspaceId={workspaceId} draft={loaded} selectedIds={selected} disabled={disabled||dirty||current.briefChanged} onCreated={p=>{setPlanId(p.id);void plans.refetch();}}/>
+    <Box title="计划记录与前后对照"><label>选择计划<select aria-label="选择内容计划" value={planId} onChange={e=>setPlanId(e.target.value)}><option value="">请选择计划</option>{plans.data?.map(p=><option key={p.id} value={p.id}>{p.name} · {p.status==='review'?'待审阅':p.status==='applied'?'已应用':'已取消'}{p.staleReason?' · 需重新核对':''}</option>)}</select></label><Note error={plans.error}/>{planId&&<ContentPlanReview key={planId} id={planId} writable={writable&&!busy} editorDirty={dirty} onApplied={()=>{void live.refetch();void plans.refetch();}}/>}</Box>
+  </div></div>;
+}
+export function ContentDraftsPage({workspaceId,writable}:{workspaceId:string;writable:boolean}){
+  const [showWriting,setShowWriting]=useState(false);const [params,setParams]=useSearchParams(),selected=params.get('draft')||'',[dirty,setDirty]=useState(false),list=useStudioList<ContentDraft>('studio/content/drafts',workspaceId,'',true),rows=list.data?.pages.flatMap(p=>p.items)||[];
+  function choose(id:string){if(dirty&&!window.confirm('当前脚本有未保存输入，确定离开当前草稿吗？'))return;const next=new URLSearchParams(params);if(id)next.set('draft',id);else next.delete('draft');setParams(next);setDirty(false);}
+  function created(d:ContentDraft){void list.refetch();choose(d.id);}
+  return <><div className="studio-heading"><h1>脚本草稿与审阅计划</h1><p>从来源整理、人工修订和多版本比较，到明确范围的工程修改。</p><a href="/studio/content">返回内容来源与账号定位</a></div>
+    <button onClick={()=>setShowWriting(value=>!value)}>本机模型生成脚本</button>{(showWriting||params.has('writing'))&&<ContentWritingPanel key={workspaceId} workspaceId={workspaceId} writable={writable} jobId={params.get('writing')||''} onJob={id=>{const next=new URLSearchParams(params);if(id)next.set('writing',id);else next.delete('writing');setParams(next);}} onAdopted={created} editorDirty={dirty} initialSourceId={params.get('source')||''} initialBriefId={params.get('brief')||''}/>}
+    {writable&&<details className="draft-create" open={!selected}><summary>建立新的脚本草稿</summary><ContentDraftCreate workspaceId={workspaceId} writable={writable} sourceId={params.get('source')||''} briefId={params.get('brief')||''} projectId={params.get('project')||''} onCreated={created}/></details>}
+    <Box title="草稿与独立变体"><label>选择脚本草稿<select aria-label="选择脚本草稿" value={selected} onChange={e=>choose(e.target.value)}><option value="">请选择已有草稿</option>{selected&&!rows.some(d=>d.id===selected)&&<option value={selected}>正在读取指定草稿</option>}{rows.map(d=><option key={d.id} value={d.id}>{d.name} · v{d.version}{d.parentId?' · 独立变体':''}{d.sourceAvailable?'':' · 来源需核对'}</option>)}</select></label><ListState query={list}/></Box>
+    {selected&&<DraftEditor key={selected} id={selected} workspaceId={workspaceId} writable={writable} onForked={created} onDirty={setDirty}/>}
+  </>;
+}

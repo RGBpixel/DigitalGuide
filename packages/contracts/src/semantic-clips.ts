@@ -1,0 +1,16 @@
+import {z} from 'zod';
+const sha=z.string().regex(/^[a-f0-9]{64}$/),ms=z.int().min(0).max(600000);
+export const semanticClipSettings=z.strictObject({contentSourceId:z.uuid(),minClipMs:z.int().min(500).max(600000),maxClipMs:z.int().min(500).max(600000),maxCandidates:z.int().min(1).max(20)});
+export const semanticTimedSegment=z.strictObject({id:z.string().min(1).max(100),startMs:ms,endMs:ms,text:z.string().trim().min(1).max(60000)});
+export const semanticSourceSnapshot=z.strictObject({contentSourceId:z.uuid(),contentSourceVersion:z.int().positive(),textSha256:sha,transcriptionId:z.uuid(),reviewVersion:z.int().positive(),reviewSha256:sha,analysisSha256:sha,sourceStartMs:ms,sourceDurationMs:z.int().min(100).max(600000),timing:z.literal('phrase'),synthetic:z.boolean(),segments:z.array(semanticTimedSegment).min(1).max(2000)}).refine(s=>s.segments.reduce((n,v)=>n+v.text.length,0)<=60000,'转写正文过长。');
+export type SemanticSourceSnapshot=z.infer<typeof semanticSourceSnapshot>;
+export const semanticEngineSchema=z.strictObject({modelId:z.literal('multilingual-e5-small-quantized'),modelSha256:sha,tokenizerSha256:sha,tokenizerConfigSha256:sha,modelConfigSha256:sha,runtime:z.literal('onnxruntime-web-wasm'),runtimeVersion:z.literal('1.31.1'),runtimeSha256:sha,tokenizerVersion:z.literal('0.2.0'),tokenizerRuntimeSha256:sha,pooling:z.literal('masked-mean-l2-query-passage-v1'),maxTokens:z.literal(256),candidatePolicy:z.literal('whole-phrase-window-nms-v1')});
+export type SemanticEngine=z.infer<typeof semanticEngineSchema>;
+export const semanticClipCandidate=z.strictObject({id:sha,name:z.string().min(1).max(80),startMs:ms,durationMs:z.int().min(100).max(600000),segmentIds:z.array(z.string().min(1).max(100)).min(1).max(2000),text:z.string().min(1).max(60000),score:z.number().finite().min(-1).max(1)});
+export const semanticClipAnalysis=z.strictObject({query:z.string().min(1).max(500),contentSourceId:z.uuid(),reviewVersion:z.int().positive(),reviewSha256:sha,timing:z.literal('phrase'),candidates:z.array(semanticClipCandidate).max(20)});
+export type SemanticClipAnalysis=z.infer<typeof semanticClipAnalysis>;
+export const semanticClipBasis=z.strictObject({jobId:z.uuid(),inputHash:sha,reportSha256:sha,candidateIds:z.array(sha).min(1).max(20)});
+export const semanticClipSelectionInput=z.strictObject({version:z.int().positive(),name:z.string().trim().min(1).max(80),candidateIds:z.array(sha).min(1).max(20).refine(v=>new Set(v).size===v.length,'不能重复选择同一候选。'),confirmed:z.literal(true)});
+export const semanticSourceOption=z.strictObject({id:z.uuid(),name:z.string(),version:z.int().positive(),reviewVersion:z.int().positive(),segmentCount:z.int().positive(),startMs:ms,durationMs:z.int().positive(),synthetic:z.boolean()});
+export const semanticSourceOptions=z.strictObject({items:z.array(semanticSourceOption).max(200)});
+export type SemanticSourceOption=z.infer<typeof semanticSourceOption>;

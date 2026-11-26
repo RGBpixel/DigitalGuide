@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {randomUUID,createHash} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
+import type {Asset,MediaTransfer,MediaProcessingPlan,MediaProcessingJob} from '@digitalguide/contracts';
+import {fixtureIds as f} from '../packages/test-fixtures/src/seed.js';
+import {segmentationFixture,segmentationVideoFixture} from '../packages/test-fixtures/src/segmentation.js';
+export interface SegmentationFixtureApi{get<T>(url:string):Promise<T>;post<T>(url:string,body:object,key?:string):Promise<T>}
+export async function makeSegmentationSource(api:SegmentationFixtureApi,directory:string,video=true,frames=6){
+ const sha=(b:Buffer)=>createHash('sha256').update(b).digest('hex');let bytes:Buffer,asset:Asset;
+ if(video){const file=await segmentationVideoFixture(path.join(directory,'source-'+randomUUID()),process.cwd(),frames);bytes=fs.readFileSync(file);let transfer=await api.post<MediaTransfer>('/studio/transfers',{workspaceId:f.workspaceA,kind:'video',name:'原创虚构人形 · 非纯色背景',fileName:'fictional-mannequin.mp4',size:bytes.length,sha256:sha(bytes),rightsNote:'程序生成的虚构人形、绘制背景与测试音，用于本机前景分割，不包含真实人员。',rightsConfirmed:true});for(let index=0;index<transfer.chunkCount;index++){const chunk=bytes.subarray(index*transfer.chunkSize,(index+1)*transfer.chunkSize);transfer=await api.post('/studio/transfers/'+transfer.id+'/parts',{index,sha256:sha(chunk),contentBase64:chunk.toString('base64')});}await api.post('/studio/transfers/'+transfer.id+'/finalize',{version:transfer.version});const end=Date.now()+60000;while(Date.now()<end){transfer=await api.get('/studio/transfers/'+transfer.id);if(transfer.status==='ready'&&transfer.assetId)break;if(transfer.status==='failed')throw new Error('原创视频实际导入失败。');await delay(100);}if(!transfer.assetId||transfer.status!=='ready')throw new Error('原创视频导入未完成。');asset=await api.get('/assets/'+transfer.assetId);}
+ else{bytes=segmentationFixture().image;const upload=await api.post<{uploadId:string}>('/assets/uploads',{workspaceId:f.workspaceA,fileName:'fictional-mannequin.png',contentBase64:bytes.toString('base64')});asset=await api.post('/assets',{uploadId:upload.uploadId,name:'原创虚构人形 · 非纯色背景',category:'reference',expiresAt:null});}
+ return{asset,sourceSHA256:sha(bytes),sourceBytes:bytes.length,fixture:'Original program-rendered fictional mannequin and nonuniform painted backdrop; no real people or downloaded media.'};
+}
+export async function makeSegmentationPlan(api:SegmentationFixtureApi,asset:Asset,name='原创神经前景分割',durationMs:number|null=null){return api.post<MediaProcessingPlan>('/studio/media-processing/plans',{workspaceId:f.workspaceA,name,sourceAssetId:asset.id,sourceVersion:asset.version,configuration:{provider:'local-media',operation:'segmentation',startMs:0,durationMs,strength:.5,instruction:''},rights:{subject:'本项目原创合成素材作者',proof:'程序生成虚构人形和测试音，用于实际本机分割与透明结果验收，不含真实人员。',expiresAt:new Date(Date.now()+7*86400000).toISOString(),confirmed:true}});}
+export async function queueSegmentation(api:SegmentationFixtureApi,plan:MediaProcessingPlan,key?:string){return api.post<MediaProcessingJob>('/studio/media-processing/plans/'+plan.id+'/run',{version:plan.version,planHash:plan.planHash,confirmed:true},key);}

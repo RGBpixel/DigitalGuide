@@ -1,0 +1,5 @@
+.studio-media video { width:100%;max-height:280px;background:#eef2e9;border-radius:8px }
+.studio-media input[type=file] { width:100%;max-width:100% }
+.studio-media-transfer { border-bottom:1px solid #dce2d7;padding:12px 0 }
+.studio-media-transfer button { margin:5px 12px 5px 0 }
+.studio-media progress { width:min(100%,480px);accent-color:#245649 }

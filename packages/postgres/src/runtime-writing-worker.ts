@@ -1,0 +1,23 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {AppError} from '../../domain/src/index.js';
+import {contentWritingNativeResult,type ContentWritingNativeResult} from '../../contracts/src/index.js';
+import {contentWritingHash} from '../../domain/src/content-writing-model.js';
+import {runContentWriting} from '../../providers/src/run-content-writing.js';
+import type {NativeCoreRepository} from './runtime-repository.js';
+import {NativeContentWriting,nativeWritingRow,type NativeWritingRow} from './runtime-content-writing.js';
+
+export class NativeWritingWorker {
+ readonly service:NativeContentWriting;
+ constructor(readonly core:NativeCoreRepository,readonly root=process.cwd(),readonly engine=runContentWriting){this.service=new NativeContentWriting(core,root);}
+ get db(){return this.core.db;}
+ async claim(){return this.db.transaction(async()=>{const value=(await this.db.query<{value:NativeWritingRow|null}>('SELECT dg_native_writing_claim() AS value')).rows[0].value;return value?nativeWritingRow(value):null;});}
+ async complete(lease:NativeWritingRow,value:ContentWritingNativeResult,onStaged?:(data:{jobId:string;native:ContentWritingNativeResult})=>Promise<void>){return this.db.transaction(async()=>{const context=await this.service.workerContext(lease),native=contentWritingNativeResult.parse(value),temporary={...context.row,status:'succeeded' as const,result:JSON.stringify(native.result),evidence:JSON.stringify(native.evidence),result_hash:contentWritingHash(native.result)};this.service.validateCompleted(temporary,context.request,context.engine);await this.db.query('SELECT dg_native_commit_writing($1,$2,$3,$4,$5,$6)',[lease.id,lease.lease_token,lease.input_hash,temporary.result,temporary.evidence,temporary.result_hash]);await this.core.event(lease.tenant_id,lease.workspace_id,lease.id,'content.writing.ready');await onStaged?.({jobId:lease.id,native});const final=await this.service.workerContext(lease,true);await this.service.completed(final.row,final.request,final.engine);await this.service.workerContext(lease,true);});}
+ async runOne(stopSignal?:AbortSignal,onClaim?:(lease:NativeWritingRow)=>void,onStaged?:Parameters<NativeWritingWorker['complete']>[2]){
+  if(stopSignal?.aborted)return false;const lease=await this.claim();if(!lease)return false;onClaim?.(lease);const abort=new AbortController(),stop=()=>abort.abort();stopSignal?.addEventListener('abort',stop,{once:true});if(stopSignal?.aborted)stop();let timer:ReturnType<typeof setInterval>|undefined,pendingTick:Promise<void>|undefined,progress=0;
+  const tick=async()=>{await this.db.transaction(async()=>{if(!(await this.db.query<{ok:boolean}>('SELECT dg_native_writing_hold($1,$2) AS ok',[lease.id,lease.lease_token])).rows[0].ok)throw new AppError('CONTENT_WRITING_LEASE','本机模型执行槽位已变化。',409);});await this.db.transaction(async()=>{await this.service.workerContext(lease);if(!(await this.db.query<{ok:boolean}>('SELECT dg_native_writing_renew($1,$2,$3) AS ok',[lease.id,lease.lease_token,Math.min(.95,progress*.95)])).rows[0].ok)throw new AppError('CONTENT_WRITING_LEASE','资料脚本生成租约已变化。',409);});};
+  try{const context=await this.db.transaction(()=>this.service.workerContext(lease));timer=setInterval(()=>{if(pendingTick)return;pendingTick=tick().catch(()=>abort.abort()).finally(()=>{pendingTick=undefined;});},500);const directory=path.join(this.db.config.dataDir,'content-writing-work',lease.id+'-'+lease.lease_token);await fs.mkdir(directory,{recursive:true,mode:0o700});const native=await this.engine({root:this.root,directory,request:context.request,engine:context.engine},abort.signal,n=>{if(Number.isFinite(n)&&n>=0&&n<=1)progress=Math.max(progress,n);});if(timer)clearInterval(timer);timer=undefined;await pendingTick;abort.signal.throwIfAborted();await this.complete(lease,native,onStaged);}
+  catch(e){if(timer)clearInterval(timer);timer=undefined;await pendingTick;await this.db.transaction(async()=>{let stale=false;try{await this.service.current(lease);}catch(error){if(!(error instanceof AppError))throw error;stale=true;}const stopped=stopSignal?.aborted??false;await this.db.query('SELECT dg_native_writing_fail($1,$2,$3,$4,$5,$6)',[lease.id,lease.lease_token,stale?'CONTENT_WRITING_STALE':stopped?'CONTENT_WRITING_INTERRUPTED':e instanceof AppError?e.code:'CONTENT_WRITING_FAILED',stale?'资料、定位或当前权限已变化，旧脚本未保存。':stopped?'服务停止，保留同一模型任务等待恢复。':e instanceof AppError?e.message:'本机模型未完成，请转人工或检查固定运行时后重试；没有使用模拟成功。',stopped,stale]);});}
+  finally{if(timer)clearInterval(timer);await pendingTick;stopSignal?.removeEventListener('abort',stop);await this.db.transaction(async()=>{await this.db.query('SELECT dg_native_writing_release($1,$2)',[lease.id,lease.lease_token]);});}return true;
+ }
+}

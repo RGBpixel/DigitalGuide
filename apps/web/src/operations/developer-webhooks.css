@@ -1,0 +1,37 @@
+.webhook-page .webhook-back{display:inline-flex;align-items:center;gap:6px;color:#416856;font-size:13px;text-decoration:none;white-space:nowrap}
+.webhook-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.webhook-overview>div{display:grid;gap:8px;align-content:center;min-height:92px;border:1px solid #dfe7e1;border-radius:13px;padding:16px 20px;background:#fff}
+.webhook-overview-value{font-size:27px;font-weight:600;color:#285f50}
+.webhook-overview>div>span:last-child{font-size:12px;color:#6c7d73}
+.webhook-subscription .developer-actions{margin-bottom:0}
+.webhook-subscription .webhook-app-name{font-weight:500;color:#4b6356}
+.webhook-topics{display:flex;gap:7px;flex-wrap:wrap}
+.webhook-topics>span{padding:5px 8px;font-size:12px;border-radius:6px;background:#f1f5f2;color:#4a6959}
+.webhook-config-issue{border-left:3px solid #c19351}
+.webhook-page h2{font-size:18px}
+.webhook-list-heading{align-items:flex-start;margin-bottom:18px}
+.webhook-list-heading>div{min-width:0}
+.webhook-list-heading p{font-size:13px;margin:9px 0 0}
+.webhook-list-heading>label{display:grid;gap:7px;font-size:12px;max-width:48%;min-width:0}
+.webhook-page select{box-sizing:border-box;max-width:100%;min-width:0;border:1px solid #d6e1d9;border-radius:8px;padding:9px 11px;background:#fff;color:#345240;font:inherit}
+.webhook-no-deliveries{padding:20px 0;color:#718077;line-height:1.8}
+.webhook-delivery{padding:19px 0;border-top:1px solid #e5ebe6;min-width:0}
+.webhook-delivery h3{font-size:15px;margin:0;color:#304d3d}
+.webhook-delivery>p{font-size:12px;color:#748176;line-height:1.8;margin:9px 0}
+.webhook-delivery .webhook-reason{font-size:13px;color:#4e6255;margin:12px 0}
+.webhook-status{padding:5px 9px;white-space:nowrap;border-radius:16px;background:#eff3f0;color:#5d7062;font-size:11px}
+.webhook-status-delivered{color:#276448;background:#e9f5ed}
+.webhook-status-failed,.webhook-status-blocked,.webhook-status-unknown{color:#936232;background:#fbf2e5}
+.webhook-status-sending,.webhook-status-retrying{color:#426d8b;background:#eef5fa}
+.webhook-delivery-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.webhook-delivery-bottom>span{font-size:12px;color:#748176}
+.webhook-delivery details{margin-top:14px;font-size:12px;color:#62756a;line-height:1.9}
+.webhook-delivery summary{cursor:pointer;padding:4px 0}
+.webhook-delivery ol{padding-left:22px;margin:8px 0}
+.webhook-pagination{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #e5ebe6;padding-top:18px}
+.webhook-change{display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.6;padding:11px 0;border-bottom:1px solid #edf1ee;margin:0}
+.webhook-change time{font-size:12px;color:#7c897f;white-space:nowrap}
+.webhook-dialog .developer-check small{display:block;color:#8b775c;font-size:11px}
+.webhook-dialog .developer-check{flex-wrap:wrap}
+@media(max-width:600px){.webhook-overview{gap:8px}.webhook-overview>div{padding:13px 10px;min-height:78px}.webhook-overview-value{font-size:23px}.webhook-overview strong{font-size:14px}.webhook-list-heading{display:grid;gap:15px}.webhook-list-heading>label{max-width:100%;width:100%}.webhook-list-heading select{width:100%}.webhook-change{display:grid;gap:4px}.webhook-page .heading-actions{gap:10px}.webhook-page .webhook-back{padding:8px 0}.webhook-delivery-bottom>button{width:100%}}
+@media(max-width:600px){.webhook-page .heading-actions{width:100%;max-width:none;flex-direction:row;align-items:stretch}.webhook-page .heading-actions>.webhook-back{flex-basis:100%}.webhook-page .heading-actions>button{flex:1;min-width:0;white-space:nowrap}.webhook-page .heading-actions>button svg{flex:none}}

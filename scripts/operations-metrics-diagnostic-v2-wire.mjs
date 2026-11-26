@@ -1,0 +1,2 @@
+import fs from 'node:fs';
+let s=fs.readFileSync('scripts/operations-metrics-diagnostic.ts','utf8');s=s.replace('operations-before-diagnostic-process-audit.json',()=> 'operations-before-diagnostic-v2-process-audit.json').replace('observed-operations-diagnostic.json',()=> 'observed-operations-diagnostic-v2.json').replace('diagnostic-summary.json',()=> 'diagnostic-summary-v2.json').replace("'-diagnostic.private.json'",()=> "'-diagnostic-v2.private.json'");fs.writeFileSync('scripts/operations-metrics-diagnostic-v2.ts',s,{flag:'wx'});

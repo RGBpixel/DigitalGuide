@@ -1,0 +1,18 @@
+import {z} from 'zod';
+const sha=z.string().regex(/^[a-f0-9]{64}$/),checkId=z.string().regex(/^v[0-2](?:h|s[0-3])$/);
+export const writingReviewIssue=z.enum(['unsupported_fact','condition_missing','negation_changed','scope_changed','attribution','citation_incomplete','citation_invalid','number_changed','duplicate_content','uncertain']);
+export type WritingReviewIssue=z.infer<typeof writingReviewIssue>;
+export const writingReviewCheck=z.strictObject({checkId,inputSHA256:sha,verdict:z.enum(['supported','unsupported','uncertain']),issues:z.array(writingReviewIssue).max(10),evidenceNote:z.string().trim().min(1).max(80)}).refine(c=>c.verdict==='supported'?c.issues.length===0:c.issues.length>0,{message:'核对状态与问题列表不一致。'});
+export type WritingReviewCheck=z.infer<typeof writingReviewCheck>;
+export const writingGuardPolicy=z.enum(['explicit-constraints-v1','explicit-constraints-v2']);
+export type WritingGuardPolicy=z.infer<typeof writingGuardPolicy>;
+export const writingConstraintFinding=z.strictObject({checkId,rule:z.enum(['explicit-prerequisite','universal-scope','conditional-action','availability-calendar','availability-exception','availability-hours']),issue:writingReviewIssue,sourceId:z.string(),quote:z.string().min(1).max(600),reason:z.string().min(1).max(80),requiredExpression:z.string().min(1).max(40).optional(),requiredAction:z.string().min(1).max(20).optional(),forbiddenExpression:z.string().min(1).max(80).optional(),unsupportedFragment:z.string().min(1).max(800).optional(),sourceAlternative:z.string().min(1).max(600).optional()});
+export type WritingConstraintFinding=z.infer<typeof writingConstraintFinding>;
+export const writingInferenceReceipt=z.strictObject({inputSHA256:sha,promptSHA256:sha,rawOutputSHA256:sha,promptTokens:z.int().nonnegative(),maximumOutputTokens:z.int().positive().max(2048),elapsedMs:z.number().nonnegative()});
+export type WritingInferenceReceipt=z.infer<typeof writingInferenceReceipt>;
+export const writingReviewCall=writingInferenceReceipt.extend({checkIds:z.array(checkId).min(1).max(6)});
+export const writingReviewPass=z.strictObject({resultSHA256:sha,checks:z.array(writingReviewCheck).min(1).max(12),guardFindings:z.array(writingConstraintFinding).max(60),calls:z.array(writingReviewCall).min(1).max(15)});
+export const writingSectionPatch=z.strictObject({checkId,edits:z.array(z.strictObject({oldText:z.string().min(1).max(800),newText:z.string().max(800)})).max(6),additionalCitations:z.array(z.strictObject({sourceId:z.string(),quote:z.string().trim().min(1).max(600)})).max(3)});
+export const writingHeadingPatch=z.strictObject({checkId,title:z.string().trim().min(1).max(100),angle:z.string().trim().min(1).max(200)});
+export const writingRepairResult=z.strictObject({sectionPatches:z.array(writingSectionPatch).max(12),headingPatches:z.array(writingHeadingPatch).max(3)});
+export type WritingRepairResult=z.infer<typeof writingRepairResult>;

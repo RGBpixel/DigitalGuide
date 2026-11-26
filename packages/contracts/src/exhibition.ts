@@ -1,0 +1,49 @@
+import { z } from 'zod';
+const id = z.uuid(), version = z.int().positive(), focusVersion = z.int().nonnegative();
+export const tourLanguage = z.enum(['zh', 'en', 'ja']);
+export const hallInput = z.strictObject({ workspaceId: id, venueId: id.optional(), name: z.string().trim().min(1).max(80), description: z.string().max(1000).default(''), zones: z.array(z.strictObject({ id, name: z.string().trim().min(1).max(60), floor: z.string().trim().min(1).max(40) })).min(1).max(30), openingHours: z.string().trim().min(1).max(300), enabled: z.boolean().default(true) });
+export const hallUpdateInput = hallInput.omit({ workspaceId: true, venueId: true }).extend({ version });
+export const localizedText = z.strictObject({ zh: z.string().trim().min(1).max(2000), en: z.string().max(2000).optional(), ja: z.string().max(2000).optional() });
+export const tourSegment = z.strictObject({ id, text: localizedText, durationMs: z.int().min(1000).max(600000), screen: z.strictObject({ kind: z.enum(['slide', 'video']), title: z.string().trim().min(1).max(120), lines: z.array(z.string().max(200)).max(8).default([]) }) });
+export const exhibitBody = z.strictObject({ sourceName: z.string().trim().min(1).max(100), sourceUrl: z.url().max(500).refine(s => { const u = new URL(s); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password; }).nullable().default(null), effectiveFrom: z.iso.datetime().nullable().default(null), effectiveUntil: z.iso.datetime().nullable().default(null), segments: z.array(tourSegment).min(1).max(40) }).refine(v => !v.effectiveFrom || !v.effectiveUntil || v.effectiveFrom < v.effectiveUntil, { message: '内容有效时间不正确。' });
+export const exhibitInput = z.strictObject({ hallId: id, code: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/), title: z.string().trim().min(1).max(80), zoneId: id, tags: z.array(z.string().trim().min(1).max(24)).max(12).default([]), accessible: z.boolean().default(true), body: exhibitBody });
+export const exhibitUpdateInput = exhibitInput.omit({ hallId: true }).extend({ version });
+export const exhibitPublishInput = z.strictObject({ version, contentVersion: version, confirmed: z.literal(true) });
+export const tourRouteInput = z.strictObject({ hallId: id, name: z.string().trim().min(1).max(80), steps: z.array(z.strictObject({ id, exhibitId: id, required: z.boolean() })).min(1).max(30), enabled: z.boolean().default(true) });
+export const tourRouteUpdateInput = tourRouteInput.omit({ hallId: true }).extend({ version });
+export const tourPlanInput = z.strictObject({ version, language: tourLanguage, timeBudgetMinutes: z.int().min(1).max(180), interests: z.array(z.string().trim().min(1).max(24)).max(12).default([]), accessibleOnly: z.boolean().default(false) });
+export const tourStartInput = z.strictObject({ routeId: id, sceneAppId: id, plan: tourPlanInput, planHash: z.string().regex(/^[a-f0-9]{64}$/), groupSize: z.int().min(1).max(500), bookingId: id.optional(), autoDevices: z.boolean().default(false), deviceId: id.optional() }).refine(v => !v.autoDevices || !!v.deviceId, { message: '自动联动需要选择设备。' });
+export const slotInput = z.strictObject({ hallId: id, startsAt: z.iso.datetime(), endsAt: z.iso.datetime(), capacity: z.int().min(1).max(500) }).refine(v => v.startsAt < v.endsAt, { message: '预约时段结束须晚于开始。' });
+export const slotUpdateInput = z.strictObject({ version, open: z.boolean() });
+export const bookingInput = z.strictObject({ slotId: id, groupName: z.string().trim().min(1).max(80), partySize: z.int().min(1).max(500), language: tourLanguage, note: z.string().max(500).default('') });
+export const bookingControlInput = z.strictObject({ version, action: z.enum(['check_in', 'cancel', 'no_show']), confirmed: z.literal(true) });
+export const deviceAction = z.enum(['show_slide', 'play_video', 'pause_media', 'blank']);
+export const exhibitDeviceInput = z.strictObject({ hallId: id, name: z.string().trim().min(1).max(80), provider: z.enum(['mock-display', 'external-display']), online: z.boolean().default(true), allowedActions: z.array(deviceAction).min(1).max(4) });
+export const exhibitDeviceUpdateInput = exhibitDeviceInput.omit({ hallId: true }).extend({ version });
+export const tourControlInput = z.strictObject({ version, focusVersion, action: z.enum(['play', 'pause', 'next', 'seek', 'answer_next', 'finish_answer', 'handoff', 'resume', 'end']), offsetMs: z.int().nonnegative().optional() });
+export const tourQuestionInput = z.strictObject({ version, focusVersion, audienceLabel: z.string().trim().min(1).max(40), text: z.string().trim().min(1).max(1000), source: z.literal('typed') });
+export const tourCancelQuestionInput = z.strictObject({ version, focusVersion, questionId: id });
+export const exhibitCommandInput = z.strictObject({ tourId: id, version, focusVersion, action: deviceAction, fixture: z.enum(['success', 'failure', 'unknown']).default('success') });
+export const tourAccessInput = z.strictObject({});
+export interface ExhibitionHall { id: string; workspaceId: string; venueId: string; name: string; description: string; zones: z.infer<typeof hallInput>['zones']; openingHours: string; enabled: boolean; version: number }
+export interface Exhibit { id: string; hallId: string; code: string; title: string; zoneId: string; tags: string[]; accessible: boolean; version: number; draftVersion: number; publishedVersion: number | null; contentVersions: { id: string; number: number; status: string; body: z.infer<typeof exhibitBody> }[] }
+export interface TourRoute { id: string; hallId: string; name: string; version: number; enabled: boolean; steps: z.infer<typeof tourRouteInput>['steps'] }
+export interface TourSlot { id: string; hallId: string; startsAt: string; endsAt: string; capacity: number; used: number; open: boolean; version: number }
+export interface TourBooking { id: string; slotId: string; groupName: string; partySize: number; language: z.infer<typeof tourLanguage>; note: string; status: 'reserved' | 'checked_in' | 'in_tour' | 'completed' | 'cancelled' | 'no_show'; version: number; createdAt: string }
+export interface TourStep { id: string; exhibitId: string; contentId: string; contentVersion: number; title: string; zone: string; floor: string; sourceName: string; sourceUrl: string | null; segments: { id: string; text: string; durationMs: number; screen: z.infer<typeof tourSegment>['screen'] }[] }
+export interface TourPlan { hash: string; language: z.infer<typeof tourLanguage>; durationMs: number; steps: TourStep[]; omitted: { exhibitId: string; reason: 'time_budget' | 'not_accessible' | 'not_interested' | 'language_unavailable' | 'content_unavailable' }[] }
+export interface TourCursor { stepIndex: number; segmentIndex: number; offsetMs: number }
+export interface DisplayState { kind: 'blank' | 'slide' | 'video' | 'paused'; title: string; lines: string[]; contentVersion: number | null; contentId: string | null; stepId: string | null; segmentId: string | null; offsetMs: number; simulated: true; sessionId: string | null }
+export interface ExhibitDevice { id: string; hallId: string; name: string; provider: string; online: boolean; allowedActions: z.infer<typeof deviceAction>[]; version: number; stateVersion: number; display: DisplayState | null; activeSessionId: string | null }
+export interface ExhibitCommand { id: string; action: string; status: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'unknown'; reason: string | null; receiptId: string | null; simulated: boolean; createdAt: string }
+export interface TourQuestion { id: string; audienceLabel: string; text: string; answer: string | null; citations: { title: string; contentVersion: number; sourceName: string; sourceUrl: string | null }[]; status: string; createdAt: string }
+export interface TourView { id: string; hallId: string; hallName: string; routeName: string; status: 'ready' | 'explaining' | 'paused' | 'answering' | 'human' | 'completed' | 'ended' | 'invalidated'; version: number; focusVersion: number; playbackEpoch: number; cursor: TourCursor; resumeCursor: TourCursor | null; language: string; groupSize: number; durationMs: number; steps: TourStep[]; questions: TourQuestion[]; activeQuestionId: string | null; reason: string; expiresAt: string; simulated: true; device: ExhibitDevice | null; commands: ExhibitCommand[]; profileName: string; csrfToken?: string }
+export const exhibitionOperations = [
+ ['post', '/exhibitions', hallInput, '创建展馆与展区'], ['post', '/exhibitions/{id}/update', hallUpdateInput, '更新展馆与开放说明'],
+ ['post', '/exhibits', exhibitInput, '保存展品来源与讲稿草稿'], ['post', '/exhibits/{id}/update', exhibitUpdateInput, '保存展品新版本'], ['post', '/exhibits/{id}/publish', exhibitPublishInput, '明确发布讲稿版本'], ['post', '/exhibits/{id}/withdraw', exhibitPublishInput, '撤回指定版本并停止使用它的导览'],
+ ['post', '/tour-routes', tourRouteInput, '创建有序路线'], ['post', '/tour-routes/{id}/update', tourRouteUpdateInput, '更新路线版本'], ['post', '/tour-routes/{id}/plan', tourPlanInput, '预览时长语言兴趣与可达性计划'],
+ ['post', '/tour-slots', slotInput, '创建容量受控预约时段'], ['post', '/tour-slots/{id}/update', slotUpdateInput, '开放或关闭新预约'], ['post', '/tour-bookings', bookingInput, '登记团体预约'], ['post', '/tour-bookings/{id}/control', bookingControlInput, '团体签到取消或未到'],
+ ['post', '/exhibit-devices', exhibitDeviceInput, '登记独立模拟或未接入真实设备'], ['post', '/exhibit-devices/{id}/update', exhibitDeviceUpdateInput, '更新设备动作白名单'], ['post', '/exhibit-device-commands', exhibitCommandInput, '管理人员提交当前讲解的白名单动作'],
+ ['post', '/tours', tourStartInput, '根据已核对计划开启独立导览'], ['post', '/tours/{id}/access', tourAccessInput, '签发受限导览终端凭证'], ['post', '/tours/{id}/control', tourControlInput, '工作人员控制导览与人工接管'],
+ ['post', '/guest/tours/{id}/control', tourControlInput, '受限终端控制讲解和断点'], ['post', '/guest/tours/{id}/questions', tourQuestionInput, '观众文字提问排队'], ['post', '/guest/tours/{id}/questions/cancel', tourCancelQuestionInput, '取消尚未回答的问题']
+] as const;

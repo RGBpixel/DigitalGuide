@@ -1,0 +1,13 @@
+import {z} from 'zod';
+import {templateEngineSchema,templateTargetSchema,templateInstantiatePlan,templateRestore,templateOriginSchema} from './template-controls.js';
+import {studioTemplateSchema,templateInstantiationPlanSchema} from './studio.js';
+export function registerTemplateControlSpec(paths:Record<string,Record<string,unknown>>,response:(s:z.ZodType)=>z.ZodType,error:z.ZodType){
+ const workspace={name:'workspaceId',in:'query',required:true,schema:{type:'string',format:'uuid'}},id=(path:string)=>path.includes('{id}')?[{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}}]:[],responses=(schema:z.ZodType)=>({'200':{description:'当前授权下的模板、参数和来源',content:{'application/json':{schema:z.toJSONSchema(response(schema))}}},...Object.fromEntries(['400','401','403','404','409','503'].map(code=>[code,{description:'输入、范围、版本、素材或渲染引擎不可用；不自动替换引擎',content:{'application/json':{schema:z.toJSONSchema(error)}}}]))});
+ const get=(path:string,schema:z.ZodType,summary:string,query:unknown[]=[])=>{paths[path]={...paths[path],get:{summary,security:[{session:[]}],parameters:[...id(path),...query],responses:responses(schema)}};},post=(path:string,input:z.ZodType,schema:z.ZodType,summary:string,idem=false)=>{paths[path]={...paths[path],post:{summary,security:[{session:[]}],parameters:[...id(path),{name:'X-CSRF-Token',in:'header',required:true,schema:{type:'string'}},...(idem?[{name:'Idempotency-Key',in:'header',required:true,schema:{type:'string'}}]:[])],requestBody:{required:true,content:{'application/json':{schema:z.toJSONSchema(input,{io:'input'})}}},responses:responses(schema)}};};
+ get('/studio/template-engines',z.array(templateEngineSchema),'读取实际渲染能力、受控AE配置与明确契约模式',[workspace]);
+ get('/studio/projects/{id}/template-targets',z.strictObject({projectVersion:z.int(),items:z.array(templateTargetSchema),total:z.int(),nextCursor:z.int().nullable()}),'按工程版本读取可绑定的声明式属性槽位',[{name:'version',in:'query',required:true,schema:{type:'integer',minimum:1}},{name:'cursor',in:'query',schema:{type:'integer',minimum:0}},{name:'limit',in:'query',schema:{type:'integer',minimum:1,maximum:500}}]);
+ post('/studio/templates/{id}/instantiate-plan',templateInstantiatePlan,templateInstantiationPlanSchema,'校验固定模板、类型化参数、曲线及素材，返回创建计划');
+ get('/studio/templates/{id}/versions',z.array(z.strictObject({version:z.int(),definition:studioTemplateSchema,createdAt:z.string()})),'读取本空间模板固定修订',[workspace]);
+ post('/studio/templates/{id}/restore',templateRestore,studioTemplateSchema,'明确确认后将历史模板恢复为新修订',true);
+ get('/studio/projects/{id}/template-origin',templateOriginSchema.nullable(),'读取工程创建时固定模板、参数和授权说明；旧工程为空');
+}
